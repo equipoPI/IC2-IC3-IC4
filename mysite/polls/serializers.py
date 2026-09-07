@@ -291,10 +291,17 @@ class FabricaSerializer(serializers.ModelSerializer):
     from datetime import datetime as _datetime
     fecha_creacion = serializers.SerializerMethodField(read_only=True)
     variables_vinculadas = serializers.SerializerMethodField(read_only=True)
+    alarmas_activas = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Fabrica
         fields = '__all__'
+
+    def get_alarmas_activas(self, obj):
+        try:
+            return obj.alarmas_sistema.filter(estado='abierta').count()
+        except Exception:
+            return 0
 
     def get_variables_vinculadas(self, obj):
         vins = obj.variables_vinculadas.filter(activo=True)
@@ -363,6 +370,7 @@ class FabricaSerializer(serializers.ModelSerializer):
 
 class DispositivoSCADASerializer(serializers.ModelSerializer):
     """Serializer para Dispositivos SCADA (sensores, actuadores, máquinas)"""
+    id = serializers.CharField(source='numero_serie', read_only=True)
     sistema_nombre = serializers.CharField(source='sistema.nombre', read_only=True)
     seccion_nombre = serializers.CharField(source='seccion.nombre', read_only=True)
     inventario_nombre = serializers.CharField(source='inventario.nombre', read_only=True)
@@ -951,6 +959,9 @@ class MantenimientoProgramadoSerializer(serializers.ModelSerializer):
 
 
 class UnidadAlmacenamientoSerializer(serializers.ModelSerializer):
+    seccion_nombre = serializers.CharField(source='seccion.nombre', read_only=True)
+    sistema_nombre = serializers.CharField(source='sistema.nombre', read_only=True)
+
     class Meta:
         model = models.UnidadAlmacenamiento
         fields = '__all__'
@@ -1073,6 +1084,7 @@ class AlarmaSerializer(serializers.ModelSerializer):
 
 class MapeoAccionMQTTSerializer(serializers.ModelSerializer):
     tipo_sistema_display = serializers.CharField(source='get_tipo_sistema_display', read_only=True)
+    sistema_nombre = serializers.CharField(source='sistema.nombre', read_only=True)
 
     class Meta:
         model = models.MapeoAccionMQTT

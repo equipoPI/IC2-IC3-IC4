@@ -225,51 +225,91 @@ class Command(BaseCommand):
                 nombre="Control de Reposición de Materia Prima",
                 tipo_sistema="FLUIDOS",
                 nombre_accion="reposicion",
-                plantilla_topico="scada/{planta}/{gateway}/{seccion}/{sistema}/accion",
+                plantilla_topico="{planta}/{gateway}/{seccion}/{sistema}/accion",
                 plantilla_payload_json='{"accion": "REPOSICION", "bombo": "{bombo}", "limite_porcentaje": "{limite}"}'
+            )
+            MapeoAccionMQTT.objects.create(
+                nombre="Carga y Mezcla de Receta de Líquidos",
+                tipo_sistema="FLUIDOS",
+                nombre_accion="mezcla",
+                plantilla_topico="{planta}/{gateway}/{seccion}/{sistema}/mezcla",
+                plantilla_payload_json='{"liquido_1": "{liquido_1}", "liquido_2": "{liquido_2}", "hora": "{hora}", "minuto": "{minuto}"}'
             )
             MapeoAccionMQTT.objects.create(
                 nombre="Freno de Emergencia de Reposición",
                 tipo_sistema="FLUIDOS",
                 nombre_accion="freno_reposicion",
-                plantilla_topico="scada/{planta}/{gateway}/{seccion}/{sistema}/accion",
+                plantilla_topico="{planta}/{gateway}/{seccion}/{sistema}/accion",
                 plantilla_payload_json='{"accion": "FRENO_REPOSICION"}'
             )
             MapeoAccionMQTT.objects.create(
                 nombre="Mezcla y Receta de Sólidos / Gránulos",
                 tipo_sistema="SOLIDOS",
                 nombre_accion="receta_solidos",
-                plantilla_topico="scada/{planta}/{gateway}/{seccion}/{sistema}/accion",
+                plantilla_topico="{planta}/{gateway}/{seccion}/{sistema}/accion",
                 plantilla_payload_json='{"accion": "RECETA_SOLIDOS", "tolva": "{tolva}", "peso_kg": "{peso}"}'
             )
             MapeoAccionMQTT.objects.create(
                 nombre="Ajuste de Temperatura de Calentador/Enfriador",
                 tipo_sistema="TEMPERATURA",
                 nombre_accion="setpoint_temperatura",
-                plantilla_topico="scada/{planta}/{gateway}/{seccion}/{sistema}/temperatura/setpoint",
+                plantilla_topico="{planta}/{gateway}/{seccion}/{sistema}/temperatura/setpoint",
                 plantilla_payload_json='{"setpoint_celsius": "{temp}", "modo": "{modo}"}'
             )
             MapeoAccionMQTT.objects.create(
                 nombre="Operación de Sellado de Empaquetadora",
                 tipo_sistema="EMPAQUE",
                 nombre_accion="sellar",
-                plantilla_topico="scada/{planta}/{gateway}/{seccion}/{sistema}/sellar",
+                plantilla_topico="{planta}/{gateway}/{seccion}/{sistema}/sellar",
                 plantilla_payload_json='{"accion": "SELLAR", "temperatura_sellado_c": "{temperatura}", "presion_bar": "{presion}"}'
             )
             MapeoAccionMQTT.objects.create(
                 nombre="Inicio de Ciclo de Empaquetado",
                 tipo_sistema="EMPAQUE",
                 nombre_accion="empaquetar",
-                plantilla_topico="scada/{planta}/{gateway}/{seccion}/{sistema}/empaquetar",
+                plantilla_topico="{planta}/{gateway}/{seccion}/{sistema}/empaquetar",
                 plantilla_payload_json='{"accion": "EMPAQUETAR", "unidades_por_caja": "{unidades}", "velocidad_cinta_hz": "{velocidad}"}'
             )
             MapeoAccionMQTT.objects.create(
                 nombre="Parada / Pausa de Cinta Transportadora",
                 tipo_sistema="EMPAQUE",
                 nombre_accion="pausar_cinta",
-                plantilla_topico="scada/{planta}/{gateway}/{seccion}/{sistema}/pausa",
+                plantilla_topico="{planta}/{gateway}/{seccion}/{sistema}/pausa",
                 plantilla_payload_json='{"accion": "PAUSAR_CINTA"}'
             )
+            MapeoAccionMQTT.objects.create(
+                nombre="Detener / Pausar Preparado de Mezcla",
+                tipo_sistema="FLUIDOS",
+                nombre_accion="detener_mezcla",
+                plantilla_topico="{planta}/{gateway}/{seccion}/{sistema}/accion",
+                plantilla_payload_json='{"accion": "DETENER_MEZCLA"}'
+            )
+            MapeoAccionMQTT.objects.create(
+                nombre="Reanudar / Continuar Preparado de Mezcla",
+                tipo_sistema="FLUIDOS",
+                nombre_accion="reanudar_mezcla",
+                plantilla_topico="{planta}/{gateway}/{seccion}/{sistema}/accion",
+                plantilla_payload_json='{"accion": "REANUDAR_MEZCLA"}'
+            )
+            MapeoAccionMQTT.objects.create(
+                nombre="Vaciar Bombo de Mezcla",
+                tipo_sistema="FLUIDOS",
+                nombre_accion="vaciar_mezcla",
+                plantilla_topico="{planta}/{gateway}/{seccion}/{sistema}/accion",
+                plantilla_payload_json='{"accion": "VACIAR_MEZCLA"}'
+            )
+            MapeoAccionMQTT.objects.create(
+                nombre="Desechar Mezcla / Producción Defectuosa",
+                tipo_sistema="FLUIDOS",
+                nombre_accion="desechar_mezcla",
+                plantilla_topico="{planta}/{gateway}/{seccion}/{sistema}/accion",
+                plantilla_payload_json='{"accion": "DESECHAR_MEZCLA"}'
+            )
             self.stdout.write(self.style.SUCCESS('Initial MapeoAccionMQTT seeded'))
+
+        # 10. Normalizar plantillas de tópicos existentes removiendo prefijo legado 'scada/'
+        for m in MapeoAccionMQTT.objects.filter(plantilla_topico__startswith='scada/'):
+            m.plantilla_topico = m.plantilla_topico.replace('scada/', '', 1)
+            m.save(update_fields=['plantilla_topico'])
 
 

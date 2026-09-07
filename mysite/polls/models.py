@@ -457,8 +457,17 @@ class RegistroMantenimiento(models.Model):
 
 
 class Sistema(models.Model):
+    TIPOS_SISTEMA = [
+        ('FLUIDOS', 'Fluidos / Líquidos'),
+        ('SOLIDOS', 'Procesamiento de Sólidos'),
+        ('EMPAQUE', 'Empaquetado y Envasado'),
+        ('TEMPERATURA', 'Control de Temperatura'),
+        ('GENERAL', 'Sistema General'),
+    ]
+
     nombre = models.CharField(max_length=100)
     fabrica = models.ForeignKey(Fabrica, on_delete=models.CASCADE, related_name='sistemas')
+    tipo_sistema = models.CharField(max_length=30, choices=TIPOS_SISTEMA, default='FLUIDOS')
     descripcion = models.TextField(blank=True, null=True)
     diagrama_layout_json = models.TextField(blank=True, null=True, help_text="Distribucion de nodos y conexiones de ReactFlow en JSON")
     activo = models.BooleanField(default=True)
@@ -514,6 +523,10 @@ class DispositivoSCADA(models.Model):
     class Meta:
         verbose_name = "Dispositivo SCADA"
         verbose_name_plural = "Dispositivos SCADA"
+
+    @property
+    def id(self):
+        return self.numero_serie
 
     def __str__(self):
         return f"{self.numero_serie} - {self.nombre}"
@@ -757,6 +770,8 @@ class UnidadAlmacenamiento(models.Model):
     ]
 
     inventario = models.ForeignKey(Inventario, on_delete=models.CASCADE, related_name='unidades_almacenamiento')
+    seccion = models.ForeignKey(Seccion, on_delete=models.SET_NULL, null=True, blank=True, related_name='unidades_almacenamiento')
+    sistema = models.ForeignKey(Sistema, on_delete=models.SET_NULL, null=True, blank=True, related_name='unidades_almacenamiento')
     nombre = models.CharField(max_length=100)
     tipo = models.CharField(max_length=20, choices=TIPOS)
     contenido = models.CharField(max_length=200)
@@ -946,11 +961,25 @@ class MapeoAccionMQTT(models.Model):
         ('TEMPERATURA', 'Control de Temperatura'),
         ('GENERAL', 'Sistema General'),
     ]
+
+    TIPOS_CONTROL = [
+        ('BOTON', 'Botón de Acción MQTT'),
+        ('SLIDER', 'Barra Deslizante (Slider)'),
+        ('NUMERICO', 'Campo Numérico (Input)'),
+        ('RECETA', 'Panel de Receta (Manual / Plantilla)'),
+    ]
+
     nombre = models.CharField(max_length=100)
+    sistema = models.ForeignKey(Sistema, on_delete=models.CASCADE, null=True, blank=True, related_name='mapeos_acciones')
     tipo_sistema = models.CharField(max_length=30, choices=TIPOS_SISTEMA, default='FLUIDOS')
+    tipo_control = models.CharField(max_length=30, choices=TIPOS_CONTROL, default='BOTON')
+    categoria_panel = models.CharField(max_length=100, default='Controles del Proceso', help_text="Sección o tarjeta contenedora")
     nombre_accion = models.CharField(max_length=50, help_text="Ej: reposicion, mezcla, receta, emergencia")
     plantilla_topico = models.CharField(max_length=255, default="scada/{tenant}/{gateway}/{seccion}/{sistema}/accion")
     plantilla_payload_json = models.TextField(default='{"accion": "{accion}", "parametros": {}}')
+    min_val = models.FloatField(default=0.0, null=True, blank=True)
+    max_val = models.FloatField(default=100.0, null=True, blank=True)
+    unidad = models.CharField(max_length=20, default='', blank=True)
     activo = models.BooleanField(default=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
 
@@ -959,4 +988,4 @@ class MapeoAccionMQTT(models.Model):
         verbose_name_plural = "Mapeos de Acciones MQTT"
 
     def __str__(self):
-        return f"{self.get_tipo_sistema_display()} - {self.nombre_accion} ({self.plantilla_topico})"
+        return f"{self.nombre} ({self.tipo_control}) - {self.nombre_accion}"

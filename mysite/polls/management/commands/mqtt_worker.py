@@ -127,7 +127,7 @@ class Command(BaseCommand):
                 
                 from polls.models import Alarma, Fabrica
                 parts = topic.split('/')
-                tenant_name = parts[0] if len(parts) > 0 else 'Rafaela_S.A'
+                tenant_name = parts[0] if len(parts) > 0 else 'rafaela_sa'
                 fabrica = Fabrica.objects.filter(nombre__iexact=tenant_name).first() or Fabrica.objects.first()
                 
                 msg_txt = payload_dict.get('mensaje') or payload_dict.get('alarma') or payload_str
@@ -154,7 +154,7 @@ class Command(BaseCommand):
                 
                 from polls.models import Fabrica
                 parts = topic.split('/')
-                tenant_name = parts[0] if len(parts) > 0 else 'Rafaela_S.A'
+                tenant_name = parts[0] if len(parts) > 0 else 'rafaela_sa'
                 fabrica = Fabrica.objects.filter(nombre__iexact=tenant_name).first() or Fabrica.objects.first()
                 if fabrica:
                     if 'estado' in payload_dict and payload_dict['estado'] in ['OPERATIVO', 'ADVERTENCIA', 'CRITICO', 'OFFLINE']:
@@ -281,12 +281,12 @@ class Command(BaseCommand):
                                 'descripcion': f"Dispositivo detectado automáticamente por MQTT en: {topic}"
                             }
                         )
-                        # Actualizar metadatos si es necesario
+                        # Actualizar metadatos sólo si no están definidos aún (preservar configuraciones del usuario)
                         updated = []
-                        if dev.seccion != seccion:
+                        if dev.seccion is None and seccion is not None:
                             dev.seccion = seccion
                             updated.append('seccion')
-                        if dev.sistema != sistema:
+                        if dev.sistema is None and sistema is not None:
                             dev.sistema = sistema
                             updated.append('sistema')
                         if dev.gateway_id != gateway_id:
@@ -340,10 +340,19 @@ class Command(BaseCommand):
                                         'volumen_actual': 0,
                                         'unidad': 'L',
                                         'estado': 'ACTIVE',
+                                        'seccion': seccion,
+                                        'sistema': sistema,
                                     }
                                 )
+                                tank_updated = ['volumen_actual']
                                 tank.volumen_actual = round(tank.capacidad * (float(porcentaje) / 100.0), 2)
-                                tank.save(update_fields=['volumen_actual'])
+                                if tank.seccion is None and seccion is not None:
+                                    tank.seccion = seccion
+                                    tank_updated.append('seccion')
+                                if tank.sistema is None and sistema is not None:
+                                    tank.sistema = sistema
+                                    tank_updated.append('sistema')
+                                tank.save(update_fields=tank_updated)
                             except Exception as ex:
                                 logger.error(f"Error actualizando UnidadAlmacenamiento {node_id}: {ex}")
                                 
