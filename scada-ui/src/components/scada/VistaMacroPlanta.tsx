@@ -14,12 +14,35 @@ import {
   AlertTriangle,
   AlertCircle,
   CheckCircle2,
-  Sliders
+  Sliders,
+  Filter,
+  RefreshCw,
+  User,
+  FlaskConical,
+  FileSpreadsheet,
+  History,
+  Check,
+  Info,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Terminal
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import apiFetch from "@/lib/api";
 import {
@@ -51,7 +74,7 @@ interface VistaMacroPlantaProps {
 }
 
 export const VistaMacroPlanta: React.FC<VistaMacroPlantaProps> = ({ planta, onVolver }) => {
-  const [activeTab, setActiveTab] = useState<"jerarquia" | "historico" | "alarmas">("jerarquia");
+  const [activeTab, setActiveTab] = useState<"jerarquia" | "historico" | "alarmas" | "historial_operativo">("jerarquia");
   const [secciones, setSecciones] = useState<any[]>([]);
   const [sistemas, setSistemas] = useState<any[]>([]);
   const [dispositivos, setDispositivos] = useState<any[]>([]);
@@ -59,6 +82,21 @@ export const VistaMacroPlanta: React.FC<VistaMacroPlantaProps> = ({ planta, onVo
   const [lecturas, setLecturas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+
+  // Historial Operativo State
+  const [historial, setHistorial] = useState<any[]>([]);
+  const [historialLoading, setHistorialLoading] = useState(false);
+  const [historialSeccionId, setHistorialSeccionId] = useState<string>("todas");
+  const [historialSistemaId, setHistorialSistemaId] = useState<string>("todos");
+  const [historialOrigen, setHistorialOrigen] = useState<string>("todos");
+  const [historialFechaDesde, setHistorialFechaDesde] = useState<string>("");
+  const [historialFechaHasta, setHistorialFechaHasta] = useState<string>("");
+  const [sortField, setSortField] = useState<"timestamp" | "origen" | "sistema" | "parametros" | "usuario" | "estado">("timestamp");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  // Modal de Detalle de Transmisión (Info)
+  const [selectedItemInfo, setSelectedItemInfo] = useState<any | null>(null);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   // Estado local para filtrar alarmas por estado
   const [filtroAlarmaEstado, setFiltroAlarmaEstado] = useState<"todas" | "abierta" | "cerrada">("todas");
@@ -186,6 +224,205 @@ export const VistaMacroPlanta: React.FC<VistaMacroPlantaProps> = ({ planta, onVo
       fetchPlantLecturas();
     }
   }, [activeTab, dispositivos]);
+
+  // Manejador de ordenamiento de columnas
+  const handleSort = (field: "timestamp" | "origen" | "sistema" | "parametros" | "usuario" | "estado") => {
+    if (sortField === field) {
+      setSortOrder(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortOrder("desc");
+    }
+  };
+
+  const getSortIcon = (field: "timestamp" | "origen" | "sistema" | "parametros" | "usuario" | "estado") => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 opacity-40 ml-1 inline" />;
+    return sortOrder === "asc" ? <ArrowUp className="h-3 w-3 text-primary ml-1 inline" /> : <ArrowDown className="h-3 w-3 text-primary ml-1 inline" />;
+  };
+
+  // Cargar Historial Operativo de la Planta
+  const loadHistorialOperativo = async () => {
+    setHistorialLoading(true);
+    try {
+      const [respAud, respProd] = await Promise.all([
+        apiFetch("/api/v1/auditoria/?modulo=SCADA"),
+        apiFetch("/api/v1/historial-produccion/"),
+      ]);
+
+      let listAud: any[] = [];
+      let listProd: any[] = [];
+
+      if (respAud.ok) {
+        const d = await respAud.json();
+        listAud = Array.isArray(d) ? d : d.results || [];
+      }
+
+      if (respProd.ok) {
+        const d = await respProd.json();
+        listProd = Array.isArray(d) ? d : d.results || [];
+      }
+
+      const itemsAud = listAud.map((item: any) => {
+        const desc = item.descripcion || "";
+        const accion = (item.accion || "").toUpperCase();
+        let origen = "Comando Manual";
+        if (accion.includes("RECETA") || desc.toLowerCase().includes("receta")) {
+          origen = "Receta Programada";
+        }
+
+        // Tópico y Sistema
+        const topicMatch = desc.match(/\(Topic:\s*([^\)]+)\)/i);
+        const topicStr = topicMatch ? topicMatch[1] : (item.objeto || "scada/bus");
+
+        let sistemaNombre = "Línea Mezclado 1";
+        if (topicStr.includes("/")) {
+          const parts = topicStr.split("/");
+          if (parts.length >= 4) {
+            const sysSlug = parts[3];
+            const foundSys = sistemas.find(s => s.nombre.toLowerCase().replace(/\./g, '').replace(/\s+/g, '_') === sysSlug.toLowerCase() || String(s.codigo).toLowerCase() === sysSlug.toLowerCase());
+            if (foundSys) sistemaNombre = foundSys.nombre;
+            else sistemaNombre = sysSlug.toUpperCase().replace(/_/g, ' ');
+          }
+        }
+
+        let parametros = desc;
+        if (item.datos && typeof item.datos === "object") {
+          parametros = JSON.stringify(item.datos);
+        } else if (desc.includes("Topic:")) {
+          const actionMatch = desc.match(/Enviado comando '([^']+)'/i) || desc.match(/Acción '([^']+)'/i);
+          const deviceMatch = desc.match(/dispositivo\s+(.+)$/i) || desc.match(/enviada a\s+(.+)$/i);
+          const actName = actionMatch ? actionMatch[1] : (accion || 'Comando');
+          const devName = deviceMatch ? deviceMatch[1] : 'Dispositivo';
+
+          if (actName === "mezcla") {
+            parametros = `Receta Mezcla de Líquidos -> ${devName}`;
+          } else if (actName === "reposicion") {
+            parametros = `Orden de Reposición de Líquidos -> ${devName}`;
+          } else if (actName === "freno_reposicion") {
+            parametros = `🚨 Freno de Reposición -> ${devName}`;
+          } else if (actName === "detener" || actName === "parar" || actName === "pausar") {
+            parametros = `⏹️ Detención de Proceso -> ${devName}`;
+          } else if (actName === "reanudar" || actName === "iniciar") {
+            parametros = `▶️ Reanudación de Proceso -> ${devName}`;
+          } else if (actName === "vaciar") {
+            parametros = `🚰 Vaciado de Tanques -> ${devName}`;
+          } else if (actName === "desechar" || actName === "descartar") {
+            parametros = `🗑️ Descarte de Mezcla -> ${devName}`;
+          } else {
+            parametros = `${actName.toUpperCase()} -> ${devName}`;
+          }
+        }
+
+        return {
+          id: `aud-${item.id}`,
+          timestamp: item.timestamp,
+          origen,
+          sistema: sistemaNombre,
+          topic: topicStr,
+          accion: item.accion || "CONTROL",
+          descripcion: desc,
+          parametros,
+          usuario: item.usuario_username || "admin",
+          ip_origen: item.ip_origen || "127.0.0.1",
+          estado: "Ejecutado",
+          raw: item,
+        };
+      });
+
+      const itemsProd = listProd.map((item: any) => ({
+        id: `prod-${item.id}`,
+        timestamp: item.fecha_inicio || item.created_at || new Date().toISOString(),
+        origen: "Receta Programada",
+        sistema: item.sistema_nombre || "Línea Mezclado 1",
+        topic: "rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/mezcla",
+        accion: "EJECUCION_RECETA",
+        descripcion: item.receta_nombre || `Receta #${item.id}`,
+        parametros: `Receta: ${item.receta_nombre || 'Mezcla'} | Cantidad: ${item.cantidad_producida || 1} u.`,
+        usuario: item.usuario_nombre || "Planificador",
+        ip_origen: "127.0.0.1",
+        estado: item.estado || "Completado",
+        raw: item,
+      }));
+
+      const combined = [...itemsAud, ...itemsProd].sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+
+      setHistorial(combined);
+    } catch (err) {
+      console.error("Error al cargar historial operativo:", err);
+    } finally {
+      setHistorialLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "historial_operativo") {
+      loadHistorialOperativo();
+    }
+  }, [activeTab]);
+
+  // Historial filtrado y ordenado dinámicamente por columna elegida
+  const historialFiltrado = useMemo(() => {
+    let filtered = historial.filter((item) => {
+      if (historialOrigen !== "todos" && item.origen !== historialOrigen) {
+        return false;
+      }
+
+      if (historialSeccionId !== "todas") {
+        const secObj = secciones.find(s => String(s.id) === historialSeccionId);
+        if (secObj) {
+          const secName = secObj.nombre.toLowerCase();
+          const secCode = (secObj.codigo || "").toLowerCase();
+          const matchDesc = item.descripcion.toLowerCase().includes(secName) || (secCode && item.descripcion.toLowerCase().includes(secCode));
+          if (!matchDesc) return false;
+        }
+      }
+
+      if (historialSistemaId !== "todos") {
+        const sysObj = sistemas.find(sys => String(sys.id) === historialSistemaId);
+        if (sysObj) {
+          const sysName = sysObj.nombre.toLowerCase();
+          const sysCode = (sysObj.codigo || "").toLowerCase();
+          const matchDesc = item.descripcion.toLowerCase().includes(sysName) || item.sistema.toLowerCase().includes(sysName) || (sysCode && item.descripcion.toLowerCase().includes(sysCode));
+          if (!matchDesc) return false;
+        }
+      }
+
+      // Filtro por Fecha Desde
+      if (historialFechaDesde) {
+        const tItem = new Date(item.timestamp).getTime();
+        const tDesde = new Date(historialFechaDesde).getTime();
+        if (!isNaN(tDesde) && tItem < tDesde) return false;
+      }
+
+      // Filtro por Fecha Hasta
+      if (historialFechaHasta) {
+        const tItem = new Date(item.timestamp).getTime();
+        const tHasta = new Date(`${historialFechaHasta}T23:59:59`).getTime();
+        if (!isNaN(tHasta) && tItem > tHasta) return false;
+      }
+
+      return true;
+    });
+
+    return filtered.sort((a, b) => {
+      let valA = a[sortField] || '';
+      let valB = b[sortField] || '';
+
+      if (sortField === 'timestamp') {
+        const tA = new Date(valA).getTime();
+        const tB = new Date(valB).getTime();
+        return sortOrder === 'asc' ? tA - tB : tB - tA;
+      }
+
+      const strA = String(valA).toLowerCase();
+      const strB = String(valB).toLowerCase();
+      if (strA < strB) return sortOrder === 'asc' ? -1 : 1;
+      if (strA > strB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [historial, historialOrigen, historialSeccionId, historialSistemaId, historialFechaDesde, historialFechaHasta, sortField, sortOrder, secciones, sistemas]);
 
   // --- MÉTRICAS MACRO FACTUALES ---
 
@@ -372,7 +609,7 @@ export const VistaMacroPlanta: React.FC<VistaMacroPlantaProps> = ({ planta, onVo
 
       {/* Tabs Internos */}
       <Tabs value={activeTab} onValueChange={(val: any) => setActiveTab(val)} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 bg-card border border-border">
+        <TabsList className="grid w-full grid-cols-4 bg-card border border-border">
           <TabsTrigger value="jerarquia" className="gap-2 text-xs font-semibold">
             <Cpu className="h-4 w-4" />
             Jerarquía y Componentes
@@ -384,6 +621,10 @@ export const VistaMacroPlanta: React.FC<VistaMacroPlantaProps> = ({ planta, onVo
           <TabsTrigger value="alarmas" className="gap-2 text-xs font-semibold">
             <Bell className="h-4 w-4" />
             Alarmas ({alarmas.length})
+          </TabsTrigger>
+          <TabsTrigger value="historial_operativo" className="gap-2 text-xs font-semibold">
+            <History className="h-4 w-4" />
+            Historial Operativo ({historial.length})
           </TabsTrigger>
         </TabsList>
 
@@ -824,7 +1065,273 @@ export const VistaMacroPlanta: React.FC<VistaMacroPlantaProps> = ({ planta, onVo
             </Card>
           </div>
         </TabsContent>
+
+        {/* Tab 4: Historial Operativo */}
+        <TabsContent value="historial_operativo" className="space-y-4 pt-4 outline-none">
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <History className="h-5 w-5 text-primary" />
+                    Historial de Transmisiones y Recetas Programadas
+                  </CardTitle>
+                  <CardDescription>
+                    Registro detallado de recetas planificadas y comandos manuales ejecutados en esta planta.
+                  </CardDescription>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={loadHistorialOperativo} 
+                  disabled={historialLoading}
+                  className="gap-2 text-xs"
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", historialLoading && "animate-spin")} />
+                  Actualizar Historial
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Filtros por Sección, Sistema, Origen y Rango de Fechas */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-3 rounded-lg bg-muted/20 border border-border">
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground uppercase font-semibold">1. Sección Interna</Label>
+                  <Select value={historialSeccionId} onValueChange={setHistorialSeccionId}>
+                    <SelectTrigger className="bg-background border-border text-xs h-8">
+                      <SelectValue placeholder="Todas las secciones" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border text-xs">
+                      <SelectItem value="todas">Todas las secciones</SelectItem>
+                      {secciones.map(s => (
+                        <SelectItem key={s.id} value={String(s.id)}>{s.nombre}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground uppercase font-semibold">2. Sistema Integrado</Label>
+                  <Select value={historialSistemaId} onValueChange={setHistorialSistemaId}>
+                    <SelectTrigger className="bg-background border-border text-xs h-8">
+                      <SelectValue placeholder="Todos los sistemas" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border text-xs">
+                      <SelectItem value="todos">Todos los sistemas</SelectItem>
+                      {sistemas.map(sys => (
+                        <SelectItem key={sys.id} value={String(sys.id)}>{sys.nombre}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground uppercase font-semibold">3. Origen</Label>
+                  <Select value={historialOrigen} onValueChange={setHistorialOrigen}>
+                    <SelectTrigger className="bg-background border-border text-xs h-8">
+                      <SelectValue placeholder="Todos los orígenes" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border text-xs">
+                      <SelectItem value="todos">Todos los orígenes</SelectItem>
+                      <SelectItem value="Receta Programada">🧪 Receta Programada</SelectItem>
+                      <SelectItem value="Comando Manual">⚙️ Comando Manual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground uppercase font-semibold">4. Fecha Desde</Label>
+                  <Input 
+                    type="date" 
+                    value={historialFechaDesde} 
+                    onChange={(e) => setHistorialFechaDesde(e.target.value)} 
+                    className="bg-background border-border text-xs h-8"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground uppercase font-semibold">5. Fecha Hasta</Label>
+                  <Input 
+                    type="date" 
+                    value={historialFechaHasta} 
+                    onChange={(e) => setHistorialFechaHasta(e.target.value)} 
+                    className="bg-background border-border text-xs h-8"
+                  />
+                </div>
+              </div>
+
+              {/* Tabla Responsiva del Historial con Ordenamiento */}
+              {historialFiltrado.length === 0 ? (
+                <div className="py-12 text-center text-muted-foreground space-y-2 border border-dashed border-border rounded-lg bg-muted/10">
+                  <FileSpreadsheet className="h-10 w-10 mx-auto text-muted-foreground opacity-60" />
+                  <p className="text-sm font-semibold">Sin registros de operaciones</p>
+                  <p className="text-xs text-muted-foreground">No se encontraron transmisiones manuales ni recetas programadas para los filtros seleccionados.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-border">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted/40 text-muted-foreground uppercase font-mono tracking-wider border-b border-border select-none">
+                      <tr>
+                        <th className="p-3 cursor-pointer hover:bg-muted/60" onClick={() => handleSort("timestamp")}>
+                          📅 Fecha / Hora {getSortIcon("timestamp")}
+                        </th>
+                        <th className="p-3 cursor-pointer hover:bg-muted/60" onClick={() => handleSort("origen")}>
+                          ⚙️ Origen {getSortIcon("origen")}
+                        </th>
+                        <th className="p-3 cursor-pointer hover:bg-muted/60" onClick={() => handleSort("sistema")}>
+                          🏭 Sistema {getSortIcon("sistema")}
+                        </th>
+                        <th className="p-3 cursor-pointer hover:bg-muted/60" onClick={() => handleSort("parametros")}>
+                          🧪 Parámetros / Acción {getSortIcon("parametros")}
+                        </th>
+                        <th className="p-3 cursor-pointer hover:bg-muted/60" onClick={() => handleSort("usuario")}>
+                          👤 Operador {getSortIcon("usuario")}
+                        </th>
+                        <th className="p-3 text-center cursor-pointer hover:bg-muted/60" onClick={() => handleSort("estado")}>
+                          🟢 Estado {getSortIcon("estado")}
+                        </th>
+                        <th className="p-3 text-right">ℹ️ Detalle</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border bg-card">
+                      {historialFiltrado.map((row) => {
+                        const isReceta = row.origen === "Receta Programada";
+                        const dtStr = row.timestamp ? new Date(row.timestamp).toLocaleString() : "-";
+
+                        return (
+                          <tr key={row.id} className="hover:bg-muted/30 transition-colors">
+                            <td className="p-3 font-mono text-muted-foreground whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="h-3.5 w-3.5 text-primary/70" />
+                                <span>{dtStr}</span>
+                              </div>
+                            </td>
+                            <td className="p-3 whitespace-nowrap">
+                              <Badge variant="outline" className={cn(
+                                "text-[10px] font-semibold gap-1 px-2 py-0.5",
+                                isReceta ? "bg-cyan-950/40 text-cyan-300 border-cyan-800" : "bg-emerald-950/40 text-emerald-300 border-emerald-800"
+                              )}>
+                                {isReceta ? <FlaskConical className="h-3 w-3" /> : <Sliders className="h-3 w-3" />}
+                                {row.origen}
+                              </Badge>
+                            </td>
+                            <td className="p-3 font-mono font-medium text-foreground whitespace-nowrap">
+                              <Badge variant="secondary" className="text-[10px] bg-muted/60">
+                                {row.sistema || "Sistema SCADA"}
+                              </Badge>
+                            </td>
+                            <td className="p-3 font-medium text-foreground">
+                              <span className="line-clamp-2">{row.parametros}</span>
+                            </td>
+                            <td className="p-3 text-muted-foreground whitespace-nowrap">
+                              <div className="flex items-center gap-1">
+                                <User className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span>{row.usuario}</span>
+                              </div>
+                            </td>
+                            <td className="p-3 text-center whitespace-nowrap">
+                              <Badge variant="outline" className="bg-success/20 text-success border-success/30 text-[10px]">
+                                <Check className="h-3 w-3 mr-1" />
+                                {row.estado}
+                              </Badge>
+                            </td>
+                            <td className="p-3 text-right whitespace-nowrap">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                onClick={() => {
+                                  setSelectedItemInfo(row);
+                                  setIsInfoModalOpen(true);
+                                }}
+                                title="Ver detalles del comando MQTT"
+                              >
+                                <Info className="h-4 w-4" />
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      {/* Modal de Detalle de Transmisión (Info) */}
+      <Dialog open={isInfoModalOpen} onOpenChange={setIsInfoModalOpen}>
+        <DialogContent className="sm:max-w-[550px] bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-foreground">
+              <Terminal className="h-5 w-5 text-cyan-400" />
+              Detalle Técnico de Transmisión SCADA
+            </DialogTitle>
+            <DialogDescription>
+              Parámetros y metadatos completos telemitidos al bus MQTT.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedItemInfo && (
+            <div className="space-y-4 py-2 text-xs">
+              <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-2 font-mono">
+                <div className="flex justify-between items-center text-cyan-400">
+                  <span className="text-muted-foreground font-sans">Tópico MQTT Objetivo:</span>
+                  <span className="font-bold break-all">{selectedItemInfo.topic}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="text-muted-foreground font-sans">Sistema:</span>
+                  <span>{selectedItemInfo.sistema}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="text-muted-foreground font-sans">Origen:</span>
+                  <span>{selectedItemInfo.origen}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="text-muted-foreground font-sans">Operador:</span>
+                  <span className="text-primary font-bold">{selectedItemInfo.usuario}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="text-muted-foreground font-sans">IP Origen:</span>
+                  <span>{selectedItemInfo.ip_origen}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="text-muted-foreground font-sans">Timestamp:</span>
+                  <span>{new Date(selectedItemInfo.timestamp).toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs text-muted-foreground uppercase font-semibold block mb-1">
+                  Descripción y Parámetros Transmitidos
+                </Label>
+                <div className="p-3 rounded bg-muted/40 border border-border font-mono text-foreground leading-relaxed break-words whitespace-pre-wrap">
+                  {selectedItemInfo.descripcion}
+                </div>
+              </div>
+
+              {selectedItemInfo.raw?.datos && (
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase font-semibold block mb-1">
+                    Payload JSON
+                  </Label>
+                  <pre className="p-3 rounded bg-slate-900 border border-slate-800 text-cyan-300 font-mono text-[11px] overflow-x-auto">
+                    {JSON.stringify(selectedItemInfo.raw.datos, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsInfoModalOpen(false)} className="h-8 text-xs">
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

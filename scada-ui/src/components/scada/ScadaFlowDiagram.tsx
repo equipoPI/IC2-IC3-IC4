@@ -106,7 +106,7 @@ const ScadaFlowDiagram = ({
       if (document.visibilityState === 'visible' && selectedSistema !== 'seleccionar') {
         loadData();
       }
-    }, 5000);
+    }, 1000);
     return () => clearInterval(interval);
   }, [selectedSistema]);
 
@@ -266,8 +266,8 @@ const ScadaFlowDiagram = ({
       });
     });
 
-    // Default demo layout ONLY if no registered items found and no filters active
-    if (nodesList.length === 0 && selectedPlanta === 'todas' && selectedSeccion === 'todas' && selectedSistema === 'todas') {
+    // Default P&ID diagram layout if no specific custom nodes match
+    if (nodesList.length === 0) {
       return [
         { id: 'bomba_reposicion', type: 'pump', position: { x: 50, y: 220 }, data: { label: 'Bomba Reposición', isRunning: false, rpm: 0, power: 0 } },
         { id: 'electrovalvula-1', type: 'valve', position: { x: 180, y: 70 }, data: { label: 'Válvula Rep. A', isOpen: false, flowRate: 0 } },
@@ -289,24 +289,21 @@ const ScadaFlowDiagram = ({
 
   // Initial edges template
   const defaultInitialEdges = useMemo(() => {
-    if (initialNodes.some(n => n.id === 'bomba_reposicion')) {
-      return [
-        { id: 'e-repo-1', source: 'bomba_reposicion', target: 'electrovalvula-1', animated: true, style: { stroke: 'hsl(var(--primary))' } },
-        { id: 'e-repo-2', source: 'bomba_reposicion', target: 'electrovalvula-2', animated: true, style: { stroke: 'hsl(var(--primary))' } },
-        { id: 'e-valv-1', source: 'electrovalvula-1', target: 'tank-1', animated: true, style: { stroke: 'hsl(var(--primary))' } },
-        { id: 'e-valv-2', source: 'electrovalvula-2', target: 'tank-2', animated: true, style: { stroke: 'hsl(var(--primary))' } },
-        { id: 'e-tank-1', source: 'tank-1', target: 'pump-1', animated: true, style: { stroke: 'hsl(var(--primary))' } },
-        { id: 'e-pump-1', source: 'pump-1', target: 'sensor-3', animated: true, style: { stroke: 'hsl(var(--primary))' } },
-        { id: 'e-flow-1', source: 'sensor-3', target: 'mixer-1', animated: true, style: { stroke: 'hsl(var(--primary))' } },
-        { id: 'e-tank-2', source: 'tank-2', target: 'pump-2', animated: true, style: { stroke: 'hsl(var(--primary))' } },
-        { id: 'e-pump-2', source: 'pump-2', target: 'sensor_caudal_02', animated: true, style: { stroke: 'hsl(var(--primary))' } },
-        { id: 'e-flow-2', source: 'sensor_caudal_02', target: 'mixer-1', animated: true, style: { stroke: 'hsl(var(--primary))' } },
-        { id: 'e-mix-1', source: 'mixer-1', target: 'tank-3', animated: true, style: { stroke: 'hsl(var(--primary))' } },
-        { id: 'e-mix-2', source: 'tank-3', target: 'bomba_mezcla', animated: true, style: { stroke: 'hsl(var(--primary))' } },
-      ];
-    }
-    return [];
-  }, [initialNodes]);
+    return [
+      { id: 'e-repo-1', source: 'bomba_reposicion', target: 'electrovalvula-1', animated: false, style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 } },
+      { id: 'e-repo-2', source: 'bomba_reposicion', target: 'electrovalvula-2', animated: false, style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 } },
+      { id: 'e-valv-1', source: 'electrovalvula-1', target: 'tank-1', animated: false, style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 } },
+      { id: 'e-valv-2', source: 'electrovalvula-2', target: 'tank-2', animated: false, style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 } },
+      { id: 'e-tank-1', source: 'tank-1', target: 'pump-1', animated: false, style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 } },
+      { id: 'e-pump-1', source: 'pump-1', target: 'sensor-3', animated: false, style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 } },
+      { id: 'e-flow-1', source: 'sensor-3', target: 'mixer-1', animated: false, style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 } },
+      { id: 'e-tank-2', source: 'tank-2', target: 'pump-2', animated: false, style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 } },
+      { id: 'e-pump-2', source: 'pump-2', target: 'sensor_caudal_02', animated: false, style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 } },
+      { id: 'e-flow-2', source: 'sensor_caudal_02', target: 'mixer-1', animated: false, style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 } },
+      { id: 'e-mix-1', source: 'mixer-1', target: 'tank-3', animated: false, style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 } },
+      { id: 'e-mix-2', source: 'tank-3', target: 'bomba_mezcla', animated: false, style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 } },
+    ];
+  }, []);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -332,18 +329,20 @@ const ScadaFlowDiagram = ({
   };
 
   // Helper para guardar layout en backend PostgreSQL
-  const saveBackendLayout = async (sistemaId: string, layoutData: any) => {
-    if (!sistemaId || sistemaId === 'todas' || sistemaId === 'seleccionar') return;
+  const saveBackendLayout = async (sistemaId: string, layoutData: any): Promise<boolean> => {
+    if (!sistemaId || sistemaId === 'todas' || sistemaId === 'seleccionar') return false;
     try {
-      await apiFetch(`/api/v1/sistemas/${sistemaId}/`, {
+      const resp = await apiFetch(`/api/v1/sistemas/${sistemaId}/`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           diagrama_layout_json: JSON.stringify(layoutData)
         })
       });
+      return resp.ok;
     } catch (e) {
       console.warn("Error guardando layout en PostgreSQL backend:", e);
+      return false;
     }
   };
 
@@ -393,7 +392,7 @@ const ScadaFlowDiagram = ({
 
     initLayout();
     return () => { isMounted = false; };
-  }, [storageKey, selectedSistema, initialNodes, defaultInitialEdges]);
+  }, [storageKey, selectedSistema]);
 
   // Merge updated device telemetry into existing nodes WITHOUT resetting node positions!
   useEffect(() => {
@@ -407,7 +406,16 @@ const ScadaFlowDiagram = ({
         }
       } catch (e) {}
 
-      if (prevNodes.length === 0) {
+      const hasRealInitialNodes = initialNodes.some(n => n.id.startsWith('dev_') || n.id.startsWith('unit_'));
+      const prevHasFallbackNodes = prevNodes.some(n => !n.id.startsWith('dev_') && !n.id.startsWith('unit_'));
+
+      // If initialNodes now has real DB nodes, filter out any stale static fallback nodes from prevNodes
+      let baseNodes = prevNodes;
+      if (hasRealInitialNodes && prevHasFallbackNodes) {
+        baseNodes = prevNodes.filter(n => n.id.startsWith('dev_') || n.id.startsWith('unit_'));
+      }
+
+      if (baseNodes.length === 0) {
         return initialNodes.map(node => ({
           ...node,
           position: cachedPositions[node.id] || node.position
@@ -416,18 +424,18 @@ const ScadaFlowDiagram = ({
 
       const freshMap = new Map(initialNodes.map(n => [n.id, n]));
 
-      // Keep existing nodes, update data, add new nodes if registered recently
-      const updatedNodes = prevNodes.map(prev => {
+      // Keep existing nodes, update data, keep prev.position intact!
+      const updatedNodes = baseNodes.map(prev => {
         const fresh = freshMap.get(prev.id);
         if (!fresh) return prev;
         return {
           ...prev,
-          data: fresh.data // Keep prev.position intact!
+          data: fresh.data // Keep user position intact!
         };
       });
 
-      // Add any newly registered nodes that weren't in prevNodes
-      const prevIds = new Set(prevNodes.map(p => p.id));
+      // Add any newly registered nodes that weren't in baseNodes
+      const prevIds = new Set(baseNodes.map(p => p.id));
       initialNodes.forEach(fresh => {
         if (!prevIds.has(fresh.id)) {
           updatedNodes.push({
@@ -444,21 +452,28 @@ const ScadaFlowDiagram = ({
   // Handle drag stop to auto-persist node positions
   const onNodeDragStop = useCallback((_: any, node: Node) => {
     try {
-      const cached = localStorage.getItem(storageKey);
-      const layout = cached ? JSON.parse(cached) : {};
-      const positions = layout.positions || {};
-      positions[node.id] = node.position;
+      setNodes(prev => {
+        const updated = prev.map(n => n.id === node.id ? { ...n, position: node.position } : n);
+        const positions: Record<string, { x: number; y: number }> = {};
+        updated.forEach(n => {
+          positions[n.id] = n.position;
+        });
 
-      const dataToSave = {
-        ...layout,
-        positions,
-        edges
-      };
+        const cached = localStorage.getItem(storageKey);
+        const layout = cached ? JSON.parse(cached) : {};
+        const dataToSave = {
+          ...layout,
+          positions,
+          edges,
+          saved_at: new Date().toISOString()
+        };
 
-      localStorage.setItem(storageKey, JSON.stringify(dataToSave));
-      if (selectedSistema && selectedSistema !== 'todas' && selectedSistema !== 'seleccionar') {
-        saveBackendLayout(selectedSistema, dataToSave);
-      }
+        localStorage.setItem(storageKey, JSON.stringify(dataToSave));
+        if (selectedSistema && selectedSistema !== 'todas' && selectedSistema !== 'seleccionar') {
+          saveBackendLayout(selectedSistema, dataToSave);
+        }
+        return updated;
+      });
     } catch (e) {
       console.warn("Error guardando posición de nodo:", e);
     }
@@ -468,7 +483,7 @@ const ScadaFlowDiagram = ({
   const onConnect = useCallback(
     (params: Connection) => {
       setEdges((eds) => {
-        const updated = addEdge({ ...params, animated: true, style: { stroke: 'hsl(var(--primary))' } }, eds);
+        const updated = addEdge({ ...params, animated: false, style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 } }, eds);
         try {
           const cached = localStorage.getItem(storageKey);
           const layout = cached ? JSON.parse(cached) : {};
@@ -499,12 +514,25 @@ const ScadaFlowDiagram = ({
 
     localStorage.setItem(storageKey, JSON.stringify(dataToSave));
 
-    if (selectedSistema && selectedSistema !== 'todas' && selectedSistema !== 'seleccionar') {
-      await saveBackendLayout(selectedSistema, dataToSave);
-      toast({
-        title: "✅ Diagrama Guardado en Servidor (Centralizado)",
-        description: `La distribución y conexiones de este sistema se guardaron en la base de datos PostgreSQL. Cualquier usuario que ingrese verá estos cambios.`,
-      });
+    let targetSysId = selectedSistema;
+    if ((!targetSysId || targetSysId === 'todas' || targetSysId === 'seleccionar') && sistemas.length > 0) {
+      targetSysId = String(sistemas[0].id);
+    }
+
+    if (targetSysId && targetSysId !== 'todas' && targetSysId !== 'seleccionar') {
+      const ok = await saveBackendLayout(targetSysId, dataToSave);
+      if (ok) {
+        toast({
+          title: "✅ Diagrama Guardado en Servidor (Centralizado)",
+          description: `La distribución y conexiones de ${nodes.length} componentes se guardaron en la base de datos PostgreSQL.`,
+        });
+      } else {
+        toast({
+          title: "❌ Error al Guardar en Base de Datos",
+          description: "No se pudo actualizar la distribución en PostgreSQL.",
+          variant: "destructive",
+        });
+      }
     } else {
       toast({
         title: "✅ Diagrama Guardado Localmente",
@@ -593,7 +621,7 @@ const ScadaFlowDiagram = ({
 
       {/* Prompt if selection incomplete */}
       {isSelectionIncomplete ? (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/90 text-slate-300 p-6 text-center">
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950 text-slate-300 p-6 text-center">
           <Layers className="h-12 w-12 text-cyan-400 mb-3 animate-pulse" />
           <h3 className="text-lg font-bold text-slate-100">Selecciona un Sistema</h3>
           <p className="text-sm text-slate-400 max-w-md mt-1">
@@ -601,7 +629,7 @@ const ScadaFlowDiagram = ({
           </p>
         </div>
       ) : nodes.length === 0 && !loading && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/90 text-slate-300 p-6 text-center">
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950 text-slate-300 p-6 text-center">
           <AlertCircle className="h-12 w-12 text-amber-400 mb-3" />
           <h3 className="text-lg font-bold text-slate-100">Sin componentes dados de alta</h3>
           <p className="text-sm text-slate-400 max-w-md mt-1">
@@ -615,8 +643,8 @@ const ScadaFlowDiagram = ({
 
       {/* ReactFlow Canvas */}
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={isSelectionIncomplete ? [] : nodes}
+        edges={isSelectionIncomplete ? [] : edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeDragStop={onNodeDragStop}
@@ -625,7 +653,7 @@ const ScadaFlowDiagram = ({
         deleteKeyCode={['Backspace', 'Delete']}
         nodeTypes={nodeTypes}
         fitView
-        className="bg-slate-950/90"
+        className="bg-slate-950"
       >
         <Background color="#334155" gap={20} size={1} />
         <Controls
