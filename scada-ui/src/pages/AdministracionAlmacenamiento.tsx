@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import apiFetch from "@/lib/api";
 import { Database, Plus, Edit, Trash2, Search, Droplets, Thermometer, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw } from "lucide-react";
 import { ControlReposicionModal } from "@/components/scada/ControlReposicionModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,6 +48,8 @@ const typeLabels = {
   deposit: "Depósito",
 };
 
+
+
 const AdministracionAlmacenamiento = () => {
   const { storageUnits, updateStorageUnit, addStorageUnit, deleteStorageUnit } = useStorage();
   const [search, setSearch] = useState("");
@@ -57,6 +60,31 @@ const AdministracionAlmacenamiento = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isReposicionOpen, setIsReposicionOpen] = useState(false);
   const [editingUnit, setEditingUnit] = useState<StorageUnit | null>(null);
+
+  const [secciones, setSecciones] = useState<any[]>([]);
+  const [sistemas, setSistemas] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [rSec, rSys] = await Promise.all([
+          apiFetch("/api/v1/secciones/"),
+          apiFetch("/api/v1/sistemas/")
+        ]);
+        if (rSec.ok) {
+          const dSec = await rSec.json();
+          setSecciones(Array.isArray(dSec) ? dSec : dSec.results || []);
+        }
+        if (rSys.ok) {
+          const dSys = await rSys.json();
+          setSistemas(Array.isArray(dSys) ? dSys : dSys.results || []);
+        }
+      } catch (e) {
+        console.warn("Error cargando secciones/sistemas:", e);
+      }
+    };
+    fetchData();
+  }, []);
 
   // Form state
   const [formData, setFormData] = useState<Omit<StorageUnit, 'id'>>({
@@ -69,6 +97,8 @@ const AdministracionAlmacenamiento = () => {
     unit: 'L',
     temperature: 25,
     status: 'active',
+    seccion: '',
+    sistema: '',
   });
 
   const handleHeaderClick = (key: string) => {
@@ -153,6 +183,8 @@ const AdministracionAlmacenamiento = () => {
         unit: unit.unit,
         temperature: unit.temperature,
         status: unit.status,
+        seccion: unit.seccion ? String(unit.seccion) : '',
+        sistema: unit.sistema ? String(unit.sistema) : '',
       });
     } else {
       setEditingUnit(null);
@@ -166,12 +198,14 @@ const AdministracionAlmacenamiento = () => {
         unit: 'L',
         temperature: 25,
         status: 'active',
+        seccion: '',
+        sistema: '',
       });
     }
     setDialogOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name || !formData.content || !formData.nodeId) {
       toast({
         title: "Error",
@@ -182,13 +216,22 @@ const AdministracionAlmacenamiento = () => {
     }
 
     if (editingUnit) {
-      updateStorageUnit({ ...formData, id: editingUnit.id });
-      toast({ title: "Actualizado", description: "Unidad de almacenamiento actualizada correctamente" });
+      const res = await updateStorageUnit({ ...formData, id: editingUnit.id });
+      if (res.success) {
+        toast({ title: "Actualizado", description: "Unidad de almacenamiento actualizada correctamente" });
+        setDialogOpen(false);
+      } else {
+        toast({ title: "❌ Error al actualizar", description: res.error || "No se pudo guardar la unidad", variant: "destructive" });
+      }
     } else {
-      addStorageUnit(formData);
-      toast({ title: "Creado", description: "Nueva unidad de almacenamiento registrada" });
+      const res = await addStorageUnit(formData);
+      if (res.success) {
+        toast({ title: "Creado", description: "Nueva unidad de almacenamiento registrada" });
+        setDialogOpen(false);
+      } else {
+        toast({ title: "❌ Error al crear", description: res.error || "No se pudo registrar la unidad", variant: "destructive" });
+      }
     }
-    setDialogOpen(false);
   };
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -197,10 +240,14 @@ const AdministracionAlmacenamiento = () => {
     setDeleteConfirmId(id);
   };
 
-  const executeDelete = () => {
+  const executeDelete = async () => {
     if (!deleteConfirmId) return;
-    deleteStorageUnit(deleteConfirmId);
-    toast({ title: "Eliminado", description: "Unidad de almacenamiento eliminada de la base de datos" });
+    const res = await deleteStorageUnit(deleteConfirmId);
+    if (res.success) {
+      toast({ title: "Eliminado", description: "Unidad de almacenamiento eliminada de la base de datos" });
+    } else {
+      toast({ title: "❌ Error al eliminar", description: res.error || "No se pudo eliminar la unidad", variant: "destructive" });
+    }
     setDeleteConfirmId(null);
   };
 
@@ -356,6 +403,8 @@ const AdministracionAlmacenamiento = () => {
                       Tipo {renderSortIcon('type')}
                     </div>
                   </TableHead>
+                  <TableHead className="text-muted-foreground select-none">Sección</TableHead>
+                  <TableHead className="text-muted-foreground select-none">Sistema</TableHead>
                   <TableHead 
                     className="text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
                     onClick={() => handleHeaderClick('content')}
@@ -415,6 +464,12 @@ const AdministracionAlmacenamiento = () => {
                     <TableRow key={unit.id}>
                       <TableCell className="font-medium text-foreground">{unit.name}</TableCell>
                       <TableCell className="text-foreground">{typeLabels[unit.type]}</TableCell>
+                      <TableCell className="text-foreground text-xs font-semibold text-cyan-300">
+                        {unit.seccion_nombre || 'General'}
+                      </TableCell>
+                      <TableCell className="text-foreground text-xs font-semibold text-indigo-300">
+                        {unit.sistema_nombre || 'General'}
+                      </TableCell>
                       <TableCell className="text-foreground">{unit.content}</TableCell>
                       <TableCell className="text-foreground font-mono">
                         {unit.currentVolume.toLocaleString()} / {unit.capacity.toLocaleString()} {unit.unit}
@@ -505,22 +560,14 @@ const AdministracionAlmacenamiento = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="nodeId">Nodo SCADA *</Label>
-                <Select
+                <Label htmlFor="nodeId">Nodo SCADA / Identificador *</Label>
+                <Input
+                  id="nodeId"
                   value={formData.nodeId}
-                  onValueChange={(value) => setFormData({ ...formData, nodeId: value })}
-                >
-                  <SelectTrigger className="bg-background border-border">
-                    <SelectValue placeholder="Seleccionar nodo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableNodes.map((node) => (
-                      <SelectItem key={node.id} value={node.id}>
-                        {node.label} ({node.id})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(e) => setFormData({ ...formData, nodeId: e.target.value })}
+                  placeholder="Ej: tank-1, tank-4, silo-1"
+                  className="bg-background border-border font-mono text-xs"
+                />
               </div>
             </div>
 
@@ -597,34 +644,64 @@ const AdministracionAlmacenamiento = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="temperature">Temperatura (°C)</Label>
-                <Input
-                  id="temperature"
-                  type="number"
-                  value={formData.temperature || ''}
-                  onChange={(e) => setFormData({ ...formData, temperature: Number(e.target.value) })}
-                  className="bg-background border-border"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="status">Estado</Label>
+                <Label htmlFor="seccion">Sección Perteneciente</Label>
                 <Select
-                  value={formData.status}
-                  onValueChange={(value: 'active' | 'inactive' | 'warning' | 'error') =>
-                    setFormData({ ...formData, status: value })
-                  }
+                  value={formData.seccion ? String(formData.seccion) : "ninguna"}
+                  onValueChange={(value) => setFormData({ ...formData, seccion: value === "ninguna" ? "" : value })}
                 >
                   <SelectTrigger className="bg-background border-border">
-                    <SelectValue />
+                    <SelectValue placeholder="Seleccionar sección" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="active">Activo</SelectItem>
-                    <SelectItem value="inactive">Inactivo</SelectItem>
-                    <SelectItem value="warning">Advertencia</SelectItem>
-                    <SelectItem value="error">Error</SelectItem>
+                    <SelectItem value="ninguna">Sin sección (General)</SelectItem>
+                    {secciones.map((sec) => (
+                      <SelectItem key={sec.id} value={String(sec.id)}>
+                        📂 {sec.nombre}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="sistema">Sistema Perteneciente</Label>
+                <Select
+                  value={formData.sistema ? String(formData.sistema) : "ninguno"}
+                  onValueChange={(value) => setFormData({ ...formData, sistema: value === "ninguno" ? "" : value })}
+                >
+                  <SelectTrigger className="bg-background border-border">
+                    <SelectValue placeholder="Seleccionar sistema" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ninguno">Sin sistema (General)</SelectItem>
+                    {sistemas.map((sys) => (
+                      <SelectItem key={sys.id} value={String(sys.id)}>
+                        ⚙️ {sys.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="status">Estado</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value: 'active' | 'inactive' | 'warning' | 'error') =>
+                  setFormData({ ...formData, status: value })
+                }
+              >
+                <SelectTrigger className="bg-background border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Activo</SelectItem>
+                  <SelectItem value="inactive">Inactivo</SelectItem>
+                  <SelectItem value="warning">Advertencia</SelectItem>
+                  <SelectItem value="error">Error</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex justify-end gap-2 pt-4">

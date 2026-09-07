@@ -12,6 +12,11 @@ export interface StorageUnit {
   unit: string;
   temperature?: number;
   status: 'active' | 'inactive' | 'warning' | 'error';
+  seccion?: number | string;
+  seccion_nombre?: string;
+  sistema?: number | string;
+  sistema_nombre?: string;
+  inventario?: number | string;
   creado_el?: string;
 }
 
@@ -26,9 +31,9 @@ export interface Ingredient {
 interface StorageContextType {
   storageUnits: StorageUnit[];
   ingredients: Ingredient[];
-  updateStorageUnit: (unit: StorageUnit) => void;
-  addStorageUnit: (unit: Omit<StorageUnit, 'id'>) => void;
-  deleteStorageUnit: (id: string) => void;
+  updateStorageUnit: (unit: StorageUnit) => Promise<{ success: boolean; error?: string }>;
+  addStorageUnit: (unit: Omit<StorageUnit, 'id'>) => Promise<{ success: boolean; error?: string }>;
+  deleteStorageUnit: (id: string) => Promise<{ success: boolean; error?: string }>;
   getStorageUnitByNodeId: (nodeId: string) => StorageUnit | undefined;
 }
 
@@ -64,22 +69,38 @@ export const StorageProvider = ({ children }: { children: ReactNode }) => {
     unit: item.unidad || "L",
     temperature: item.temperatura || undefined,
     status: (item.estado || "ACTIVE").toLowerCase() as 'active' | 'inactive' | 'warning' | 'error',
+    seccion: item.seccion || undefined,
+    seccion_nombre: item.seccion_nombre || "",
+    sistema: item.sistema || undefined,
+    sistema_nombre: item.sistema_nombre || "",
+    inventario: item.inventario || undefined,
     creado_el: item.created_at || "",
   });
 
   // Mapear unidad de almacenamiento de frontend a backend
-  const mapToBackend = (unit: Omit<StorageUnit, 'id'> | StorageUnit, inventarioId: number) => ({
-    nombre: unit.name,
-    tipo: unit.type.toUpperCase(),
-    contenido: unit.content,
-    volumen_actual: unit.currentVolume,
-    capacidad: unit.capacity,
-    unidad: unit.unit,
-    temperatura: unit.temperature || null,
-    estado: unit.status.toUpperCase(),
-    node_id: unit.nodeId || null,
-    inventario: inventarioId,
-  });
+  const mapToBackend = (unit: Omit<StorageUnit, 'id'> | StorageUnit, fallbackInventarioId: number) => {
+    const secStr = unit.seccion && unit.seccion !== "ninguna" && unit.seccion !== "none" ? String(unit.seccion) : "";
+    const sysStr = unit.sistema && unit.sistema !== "ninguno" && unit.sistema !== "none" ? String(unit.sistema) : "";
+    const targetInv = unit.inventario ? Number(unit.inventario) : (fallbackInventarioId || 1);
+    
+    const payload: any = {
+      nombre: unit.name,
+      tipo: (unit.type || 'tank').toUpperCase(),
+      contenido: unit.content,
+      volumen_actual: Number(unit.currentVolume) || 0,
+      capacidad: Number(unit.capacity) || 1000,
+      unidad: unit.unit || 'L',
+      temperatura: unit.temperature !== undefined && unit.temperature !== null && !isNaN(Number(unit.temperature)) ? Number(unit.temperature) : null,
+      estado: (unit.status || 'active').toUpperCase(),
+      node_id: unit.nodeId && unit.nodeId.trim() !== "" ? unit.nodeId : null,
+      seccion: secStr && !isNaN(Number(secStr)) ? Number(secStr) : null,
+      sistema: sysStr && !isNaN(Number(sysStr)) ? Number(sysStr) : null,
+    };
+    if (targetInv && !isNaN(targetInv)) {
+      payload.inventario = targetInv;
+    }
+    return payload;
+  };
 
   // Cargar datos al montar
   const loadData = async () => {
@@ -114,30 +135,37 @@ export const StorageProvider = ({ children }: { children: ReactNode }) => {
       if (document.visibilityState === 'visible') {
         loadData();
       }
-    }, 10000);
+    }, 2000);
     return () => clearInterval(interval);
   }, []);
 
-  const updateStorageUnit = async (updatedUnit: StorageUnit) => {
+  const updateStorageUnit = async (updatedUnit: StorageUnit): Promise<{ success: boolean; error?: string }> => {
     try {
       const invId = defaultInventarioId || 1;
+      const payload = mapToBackend(updatedUnit, invId);
       const resp = await apiFetch(`/api/v1/unidades-almacenamiento/${updatedUnit.id}/`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(mapToBackend(updatedUnit, invId)),
+        body: JSON.stringify(payload),
       });
       if (resp.ok) {
         const data = await resp.json();
+        const frontendUnit = mapToFrontend(data);
         setStorageUnits((prev) =>
-          prev.map((unit) => (unit.id === updatedUnit.id ? mapToFrontend(data) : unit))
+          prev.map((unit) => (unit.id === updatedUnit.id ? frontendUnit : unit))
         );
+        return { success: true };
+      } else {
+        const errData = await resp.json().catch(() => ({}));
+        const detail = errData.detail || Object.entries(errData).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`).join(" | ") || `HTTP ${resp.status}`;
+        return { success: false, error: detail };
       }
     } catch (err) {
-      console.error("Error al actualizar unidad de almacenamiento", err);
+      return { success: false, error: "Error de comunicación con el servidor" };
     }
   };
 
-  const addStorageUnit = async (unitData: Omit<StorageUnit, 'id'>) => {
+  const addStorageUnit = async (unitData: Omit<StorageUnit, 'id'>): Promise<{ success: boolean; error?: string }> => {
     try {
       const invId = defaultInventarioId || 1;
       const resp = await apiFetch('/api/v1/unidades-almacenamiento/', {
@@ -147,23 +175,32 @@ export const StorageProvider = ({ children }: { children: ReactNode }) => {
       });
       if (resp.ok) {
         const data = await resp.json();
-        setStorageUnits((prev) => [...prev, mapToFrontend(data)]);
+        const newUnit = mapToFrontend(data);
+        setStorageUnits((prev) => [...prev, newUnit]);
+        return { success: true };
+      } else {
+        const errData = await resp.json().catch(() => ({}));
+        const detail = errData.detail || Object.entries(errData).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`).join(" | ") || `HTTP ${resp.status}`;
+        return { success: false, error: detail };
       }
     } catch (err) {
-      console.error("Error al crear unidad de almacenamiento", err);
+      return { success: false, error: "Error al crear unidad de almacenamiento" };
     }
   };
 
-  const deleteStorageUnit = async (id: string) => {
+  const deleteStorageUnit = async (id: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const resp = await apiFetch(`/api/v1/unidades-almacenamiento/${id}/`, {
         method: 'DELETE',
       });
-      if (resp.ok) {
+      if (resp.ok || resp.status === 204) {
         setStorageUnits((prev) => prev.filter((unit) => unit.id !== id));
+        return { success: true };
+      } else {
+        return { success: false, error: `Error HTTP ${resp.status}` };
       }
     } catch (err) {
-      console.error("Error al eliminar unidad de almacenamiento", err);
+      return { success: false, error: "Error al eliminar unidad de almacenamiento" };
     }
   };
 
