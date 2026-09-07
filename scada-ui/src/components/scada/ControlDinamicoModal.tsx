@@ -48,6 +48,8 @@ export function ControlDinamicoModal({
     }
   }, [open, tipoSistema]);
 
+  const getItemId = (item: any) => String(item?.id || item?.numero_serie || item?.pk || "");
+
   const fetchMapeosYDispositivos = async () => {
     setLoading(true);
     try {
@@ -77,7 +79,7 @@ export function ControlDinamicoModal({
         if (dispositivoId) {
           setSelectedDispositivo(String(dispositivoId));
         } else if (listDisp.length > 0) {
-          setSelectedDispositivo(String(listDisp[0].id));
+          setSelectedDispositivo(getItemId(listDisp[0]));
         }
       }
     } catch (e) {
@@ -108,16 +110,17 @@ export function ControlDinamicoModal({
     let payload = selectedAccion.plantilla_payload_json;
 
     // Obtener dispositivo seleccionado
-    const disp = dispositivos.find(d => String(d.id) === selectedDispositivo);
-    const tenant = "fabrica1";
-    const gateway = disp ? (disp.mac_address || disp.numero_serie || "gateway1") : "gateway1";
-    const seccion = disp ? (disp.seccion_nombre || "seccion1") : "seccion1";
-    const sistema = (nombreSistema || "sistema").toLowerCase().replace(/\s+/g, "_");
+    const disp = dispositivos.find(d => getItemId(d) === selectedDispositivo);
+    const tenant = disp?.tenant || disp?.planta_nombre || "rafaela_sa";
+    const gateway = disp ? (disp.mac_address || disp.numero_serie || "d83add60dbb0") : "d83add60dbb0";
+    const seccion = disp ? (disp.seccion_nombre || "a1") : "a1";
+    const sistema = (nombreSistema || "linea_mezclado_1").toLowerCase().replace(/\s+/g, "_");
 
     // Reemplazar variables de contexto en el tópico
     topic = topic
       .replace("{tenant}", tenant)
       .replace("{planta}", tenant)
+      .replace("{gateway_id}", gateway)
       .replace("{gateway}", gateway)
       .replace("{seccion}", seccion)
       .replace("{sistema}", sistema)
@@ -196,7 +199,7 @@ export function ControlDinamicoModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl bg-slate-900 border-slate-700 text-slate-100 shadow-2xl">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-slate-900 border-slate-700 text-slate-100 shadow-2xl">
         <DialogHeader>
           <div className="flex items-center gap-2">
             {getSystemIcon(tipoSistema)}
@@ -222,11 +225,14 @@ export function ControlDinamicoModal({
                   <SelectValue placeholder="Seleccionar dispositivo..." />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-900 border-slate-700 text-slate-200">
-                  {dispositivos.map((d) => (
-                    <SelectItem key={d.id} value={String(d.id)}>
-                      {d.nombre || d.numero_serie} ({d.seccion_nombre || "Sin Sección"})
-                    </SelectItem>
-                  ))}
+                  {dispositivos.map((d) => {
+                    const devId = getItemId(d);
+                    return (
+                      <SelectItem key={devId} value={devId}>
+                        {d.nombre || d.numero_serie || devId} ({d.seccion_nombre || "Sin Sección"})
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -288,21 +294,69 @@ export function ControlDinamicoModal({
               {Object.keys(paramValues).length === 0 ? (
                 <p className="text-xs text-slate-400 italic">Esta acción se transmite de forma directa sin parámetros variables.</p>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {Object.entries(paramValues).map(([key, val]) => (
-                    <div key={key} className="space-y-1">
-                      <Label className="text-xs text-slate-300 font-mono capitalize">
-                        {key.replace(/_/g, " ")}:
-                      </Label>
-                      <Input
-                        type="text"
-                        value={val}
-                        onChange={(e) => setParamValues({ ...paramValues, [key]: e.target.value })}
-                        className="bg-slate-900 border-slate-700 text-slate-100 text-xs font-mono"
-                        placeholder={`Valor para ${key}...`}
-                      />
-                    </div>
-                  ))}
+                <div className="space-y-4">
+                  {Object.entries(paramValues).map(([key, val]) => {
+                    const numVal = Number(val) || 0;
+                    const labelClean = key.replace(/_/g, " ");
+                    const isPercentage = key.includes("porcentaje") || key.includes("nivel") || key.includes("limite");
+                    const maxLimit = isPercentage ? 100 : (key.includes("litros") || key.includes("lts") || key.includes("volumen") ? 500 : 120);
+
+                    return (
+                      <div key={key} className="p-3 bg-slate-900/90 rounded-lg border border-slate-800 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-cyan-300 font-mono capitalize flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                            {labelClean}:
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              value={val}
+                              onChange={(e) => setParamValues({ ...paramValues, [key]: e.target.value })}
+                              className="w-24 h-7 bg-slate-950 border-slate-700 text-slate-100 text-xs font-mono text-right"
+                            />
+                            <span className="text-xs text-slate-400 font-mono">{isPercentage ? "%" : "unid"}</span>
+                          </div>
+                        </div>
+
+                        {/* Slider Bar (Barra Deslizante) */}
+                        <div className="space-y-1 pt-1">
+                          <input
+                            type="range"
+                            min="0"
+                            max={maxLimit}
+                            step="1"
+                            value={numVal}
+                            onChange={(e) => setParamValues({ ...paramValues, [key]: e.target.value })}
+                            className="w-full h-2 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                          />
+                          <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                            <span>0</span>
+                            <span>{Math.round(maxLimit / 2)}</span>
+                            <span>{maxLimit} {isPercentage ? "%" : ""}</span>
+                          </div>
+                        </div>
+
+                        {/* Preset Quick Buttons */}
+                        <div className="flex items-center gap-1 pt-1">
+                          <span className="text-[10px] text-slate-500 font-mono mr-1">Rápido:</span>
+                          {[25, 50, 75, 100].map(pct => {
+                            const valCalc = isPercentage ? pct : Math.round((maxLimit * pct) / 100);
+                            return (
+                              <button
+                                key={pct}
+                                type="button"
+                                onClick={() => setParamValues({ ...paramValues, [key]: String(valCalc) })}
+                                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-cyan-900/60 text-slate-300 hover:text-cyan-300 text-[10px] font-mono border border-slate-700 transition-colors"
+                              >
+                                {pct}% ({valCalc})
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 

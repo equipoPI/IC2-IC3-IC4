@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Wifi, Plus, Edit, Trash2, Save, X, Search, SlidersHorizontal, Cpu } from "lucide-react";
+import { Wifi, Plus, Edit, Trash2, Save, X, Search, SlidersHorizontal, Cpu, Info, CheckCircle2, Radio, Terminal } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -81,7 +81,7 @@ const ConfiguracionMQTT = () => {
     nombre: "",
     tipo_sistema: "FLUIDOS",
     nombre_accion: "reposicion",
-    plantilla_topico: "scada/{planta}/{gateway}/{seccion}/{sistema}/accion",
+    plantilla_topico: "{planta}/{gateway}/{seccion}/{sistema}/accion",
     plantilla_payload_json: '{"accion": "{accion}", "parametros": {}}'
   });
 
@@ -566,101 +566,96 @@ const ConfiguracionMQTT = () => {
         </CardContent>
       </Card>
 
-      {/* Mapeos de Acciones y Tópicos por Tipo de Sistema */}
-      <Card className="bg-card border-border">
-        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 gap-4">
-          <div>
-            <CardTitle className="text-lg">Configuración de Tópicos y Acciones por Tipo de Sistema</CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Define la plantilla de tópicos ({`{planta}/{mac}/{seccion}/{sistema}/...`}) y comandos por tipo de proceso industrial
-            </p>
+      {/* Resumen Informativo: Tópicos Soportados por Gateway y SCADA */}
+      <Card className="bg-slate-900/60 border-cyan-500/30 text-slate-100 shadow-lg">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Radio className="h-5 w-5 text-cyan-400 animate-pulse" />
+            <CardTitle className="text-base font-bold text-cyan-300">
+              Estructura de Tópicos MQTT Soportados en el Sistema
+            </CardTitle>
           </div>
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            {/* Buscador de acciones/tópicos */}
-            <div className="relative flex-1 sm:w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Buscar por nombre, código o tópico..."
-                className="pl-8 h-9 text-xs bg-background border-border"
-                value={searchMapeo}
-                onChange={(e) => setSearchMapeo(e.target.value)}
-              />
+          <p className="text-xs text-slate-400">
+            Formatos válidos para publicación y recepción de telemetría y comandos en Gateways (Raspberry Pi) y Backend SCADA:
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono">
+            <div className="p-3 rounded-lg bg-slate-950/80 border border-emerald-500/30 space-y-1">
+              <div className="flex justify-between items-center text-emerald-400 font-bold text-xs">
+                <span>REPOSICIÓN</span>
+                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/30">Serial: R1075</Badge>
+              </div>
+              <p className="text-cyan-300 text-[11px]">rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/reposicion</p>
+              <p className="text-slate-400 text-[10px]">Payload: <code className="text-slate-200">{`{"bombo": 1, "limite_porcentaje": 75}`}</code></p>
             </div>
 
-            {/* Selector de filtro por tipo de sistema */}
-            <Select value={filterTipoSistema} onValueChange={setFilterTipoSistema}>
-              <SelectTrigger className="w-[160px] h-9 text-xs bg-background border-border">
-                <SelectValue placeholder="Tipo de Sistema" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="TODOS">Todos los Sistemas</SelectItem>
-                <SelectItem value="FLUIDOS">Fluidos / Líquidos</SelectItem>
-                <SelectItem value="SOLIDOS">Procesamiento Sólidos</SelectItem>
-                <SelectItem value="EMPAQUE">Empaquetado / Envasado</SelectItem>
-                <SelectItem value="TEMPERATURA">Control Temperatura</SelectItem>
-                <SelectItem value="GENERAL">Sistema General</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="p-3 rounded-lg bg-slate-950/80 border border-rose-500/30 space-y-1">
+              <div className="flex justify-between items-center text-rose-400 font-bold text-xs">
+                <span>FRENO REPOSICIÓN</span>
+                <Badge variant="outline" className="text-[10px] bg-rose-500/10 text-rose-400 border-rose-500/30">Serial: F</Badge>
+              </div>
+              <p className="text-cyan-300 text-[11px]">rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/freno_reposicion</p>
+              <p className="text-slate-400 text-[10px]">Payload: <code className="text-slate-200">{`{}`}</code></p>
+            </div>
 
-            <Button size="sm" onClick={handleNuevoMapeo} className="h-9 px-3 gap-1">
-              <Plus className="h-4 w-4" />
-              Nueva Plantilla
-            </Button>
+            <div className="p-3 rounded-lg bg-slate-950/80 border border-amber-500/30 space-y-1">
+              <div className="flex justify-between items-center text-amber-400 font-bold text-xs">
+                <span>DETENER</span>
+                <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-400 border-amber-500/30">Serial: D</Badge>
+              </div>
+              <p className="text-cyan-300 text-[11px]">rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/detener</p>
+              <p className="text-slate-400 text-[10px]">Payload: <code className="text-slate-200">{`{}`}</code></p>
+            </div>
+
+            <div className="p-3 rounded-lg bg-slate-950/80 border border-blue-500/30 space-y-1">
+              <div className="flex justify-between items-center text-blue-400 font-bold text-xs">
+                <span>REANUDAR</span>
+                <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-400 border-blue-500/30">Serial: A</Badge>
+              </div>
+              <p className="text-cyan-300 text-[11px]">rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/reanudar</p>
+              <p className="text-slate-400 text-[10px]">Payload: <code className="text-slate-200">{`{}`}</code></p>
+            </div>
+
+            <div className="p-3 rounded-lg bg-slate-950/80 border border-indigo-500/30 space-y-1">
+              <div className="flex justify-between items-center text-indigo-400 font-bold text-xs">
+                <span>VACIAR</span>
+                <Badge variant="outline" className="text-[10px] bg-indigo-500/10 text-indigo-400 border-indigo-500/30">Serial: V</Badge>
+              </div>
+              <p className="text-cyan-300 text-[11px]">rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/vaciar</p>
+              <p className="text-slate-400 text-[10px]">Payload: <code className="text-slate-200">{`{}`}</code></p>
+            </div>
+
+            <div className="p-3 rounded-lg bg-slate-950/80 border border-purple-500/30 space-y-1">
+              <div className="flex justify-between items-center text-purple-400 font-bold text-xs">
+                <span>DESECHAR</span>
+                <Badge variant="outline" className="text-[10px] bg-purple-500/10 text-purple-400 border-purple-500/30">Serial: X</Badge>
+              </div>
+              <p className="text-cyan-300 text-[11px]">rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/desechar</p>
+              <p className="text-slate-400 text-[10px]">Payload: <code className="text-slate-200">{`{}`}</code></p>
+            </div>
+
+            <div className="p-3 rounded-lg bg-slate-950/80 border border-cyan-500/30 md:col-span-2 space-y-1">
+              <div className="flex justify-between items-center text-cyan-400 font-bold text-xs">
+                <span>MEZCLA</span>
+                <Badge variant="outline" className="text-[10px] bg-cyan-500/10 text-cyan-400 border-cyan-500/30">Serial: L1 50, L2 30, H 0, M 15</Badge>
+              </div>
+              <p className="text-cyan-300 text-[11px]">rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/mezcla</p>
+              <p className="text-slate-400 text-[10px]">Payload: <code className="text-slate-200">{`{"liquido_1": 50, "liquido_2": 30, "hora": 0, "minuto": 15}`}</code></p>
+            </div>
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-lg border border-border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/30 hover:bg-muted/30">
-                  <TableHead className="text-muted-foreground">ID</TableHead>
-                  <TableHead className="text-muted-foreground">Nombre de Acción</TableHead>
-                  <TableHead className="text-muted-foreground">Tipo de Sistema</TableHead>
-                  <TableHead className="text-muted-foreground">Código Acción</TableHead>
-                  <TableHead className="text-muted-foreground">Plantilla Tópico MQTT</TableHead>
-                  <TableHead className="text-muted-foreground">Payload Base (JSON)</TableHead>
-                  <TableHead className="text-muted-foreground">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mapeosFiltrados.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      No se encontraron plantillas de acción que coincidan con la búsqueda o filtro.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  mapeosFiltrados.map((m) => (
-                    <TableRow key={m.id}>
-                      <TableCell className="font-mono text-foreground">{m.id}</TableCell>
-                      <TableCell className="text-foreground font-medium">{m.nombre}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">
-                          {m.tipo_sistema_display || m.tipo_sistema}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-emerald-400 font-bold">{m.nombre_accion}</TableCell>
-                      <TableCell className="font-mono text-xs text-foreground max-w-xs truncate">{m.plantilla_topico}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground max-w-xs truncate">{m.plantilla_payload_json}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => handleEditMapeo(m)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => confirmDeleteMapeo(String(m.id))}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+
+          <div className="p-2.5 rounded bg-slate-950/50 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px] text-slate-400">
+            <span className="flex items-center gap-1.5">
+              <Info className="h-4 w-4 text-cyan-400 shrink-0" />
+              <span><strong>Especificación Canónica Estándar:</strong> Estructura jerárquica de 5 niveles en minúsculas sin puntos y sincronización serial directa a Arduino.</span>
+            </span>
+            <span className="text-slate-500 text-[10px]">Estructura: <code className="text-cyan-400 font-mono font-bold">{`rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/{accion}`}</code></span>
           </div>
         </CardContent>
       </Card>
+
+
 
       {/* Dialog Conexión */}
       <Dialog open={dialogConexion} onOpenChange={setDialogConexion}>
@@ -752,7 +747,7 @@ const ConfiguracionMQTT = () => {
 
       {/* Dialog Mapeo Acción */}
       <Dialog open={dialogMapeo} onOpenChange={setDialogMapeo}>
-        <DialogContent className="bg-card border-border sm:max-w-[550px]">
+        <DialogContent className="bg-card border-border max-h-[85vh] overflow-y-auto sm:max-w-[550px]">
           <DialogHeader>
             <DialogTitle>{editingMapeo ? "Editar Mapeo de Acción" : "Nuevo Mapeo de Acción y Tópico"}</DialogTitle>
           </DialogHeader>

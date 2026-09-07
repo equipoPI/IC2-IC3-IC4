@@ -1,4 +1,4 @@
-import { Activity, Settings, Play, Pause, RotateCcw, Maximize2, Filter, Layers, Check, RefreshCw } from "lucide-react";
+import { Activity, Settings, Play, Pause, RotateCcw, Maximize2, Filter, Layers, Check, RefreshCw, PackageCheck, Thermometer, Sliders, Cpu, FlaskConical, Droplet, AlertCircle, PlusCircle, Zap, Terminal, Edit } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,10 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import apiFetch from "@/lib/api";
+import { cn } from "@/lib/utils";
 import ScadaFlowDiagram from "@/components/scada/ScadaFlowDiagram";
 import { ControlReposicionModal } from "@/components/scada/ControlReposicionModal";
 import { ControlDinamicoModal } from "@/components/scada/ControlDinamicoModal";
-import { PackageCheck, Thermometer, Sliders, Cpu } from "lucide-react";
+import { ControlRecetaLiquidosModal } from "@/components/scada/ControlRecetaLiquidosModal";
+import { GestorComandosModal } from "@/components/scada/GestorComandosModal";
+import { DynamicScadaPanels } from "@/components/scada/DynamicScadaPanels";
 import {
   Dialog,
   DialogContent,
@@ -27,9 +30,71 @@ const VisualizacionSCADA = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isReposicionOpen, setIsReposicionOpen] = useState(false);
+  const [isRecetaLiquidosOpen, setIsRecetaLiquidosOpen] = useState(false);
   const [isDinamicoOpen, setIsDinamicoOpen] = useState(false);
+  const [isGestorComandosOpen, setIsGestorComandosOpen] = useState(false);
+  const [controlToEdit, setControlToEdit] = useState<any | null>(null);
+  const [customComandos, setCustomComandos] = useState<any[]>([]);
+  const [panelsRefreshKey, setPanelsRefreshKey] = useState(0);
+  const [ultimaTransmision, setUltimaTransmision] = useState<any | null>(null);
   const [dinamicoTipoSistema, setDinamicoTipoSistema] = useState("EMPAQUE");
   const [dinamicoNombreSistema, setDinamicoNombreSistema] = useState("Empaquetadora SCADA");
+
+  // System Edit Modal States
+  const [isEditSistemaOpen, setIsEditSistemaOpen] = useState(false);
+  const [formSistema, setFormSistema] = useState({
+    id: '',
+    nombre: '',
+    tipo_sistema: 'FLUIDOS',
+    fabrica: '',
+    descripcion: ''
+  });
+
+  const handleOpenEditSistema = () => {
+    if (!selectedSistemaObj) return;
+    setFormSistema({
+      id: String(selectedSistemaObj.id),
+      nombre: selectedSistemaObj.nombre,
+      tipo_sistema: selectedSistemaObj.tipo_sistema || 'FLUIDOS',
+      fabrica: String(selectedSistemaObj.fabrica),
+      descripcion: selectedSistemaObj.descripcion || ''
+    });
+    setIsEditSistemaOpen(true);
+  };
+
+  const handleSaveSistema = async () => {
+    if (!formSistema.nombre || !formSistema.id) return;
+    try {
+      const payload: any = {
+        nombre: formSistema.nombre,
+        tipo_sistema: formSistema.tipo_sistema,
+        descripcion: formSistema.descripcion || ""
+      };
+      if (formSistema.fabrica && formSistema.fabrica !== 'undefined' && formSistema.fabrica !== 'null' && !isNaN(Number(formSistema.fabrica))) {
+        payload.fabrica = Number(formSistema.fabrica);
+      }
+
+      const resp = await apiFetch(`/api/v1/sistemas/${formSistema.id}/`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (resp.ok) {
+        const updated = await resp.json();
+        toast.success("✅ Sistema y tipo de proceso actualizados");
+        setIsEditSistemaOpen(false);
+        setSistemas(prev => prev.map(s => String(s.id) === String(formSistema.id) ? { ...s, ...updated } : s));
+        setPanelsRefreshKey(k => k + 1);
+        await loadFiltros();
+      } else {
+        const errData = await resp.json().catch(() => ({}));
+        const msg = typeof errData === 'object' ? JSON.stringify(errData) : 'Error al actualizar el sistema';
+        toast.error(`❌ ${msg}`);
+      }
+    } catch (e) {
+      toast.error("Fallo de red al guardar el sistema");
+    }
+  };
 
   const openDinamicoModal = (tipo: string, nombre: string) => {
     setDinamicoTipoSistema(tipo);
@@ -38,8 +103,6 @@ const VisualizacionSCADA = () => {
   };
 
   const [dispositivos, setDispositivos] = useState<any[]>([]);
-
-  // Filter lists fetched from database
   const [plantas, setPlantas] = useState<any[]>([]);
   const [secciones, setSecciones] = useState<any[]>([]);
   const [sistemas, setSistemas] = useState<any[]>([]);
@@ -130,11 +193,87 @@ const VisualizacionSCADA = () => {
     }
   };
 
+  // Cargar comandos dinámicos persistentes desde PostgreSQL
+  const fetchCustomComandos = async () => {
+    try {
+      const res = await apiFetch("/api/v1/mapeos-acciones-mqtt/");
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : data.results || [];
+        setCustomComandos(list);
+      }
+    } catch (e) {
+      console.warn("Error cargando mapeos personalizados MQTT:", e);
+    }
+  };
+
+  // Cargar la última receta / comando transmitido para la receta activa
+  const loadUltimaTransmision = async () => {
+    if (selectedSistema === 'seleccionar') {
+      setUltimaTransmision(null);
+      return;
+    }
+    try {
+      const res = await apiFetch(`/api/v1/auditoria/?sistema_id=${selectedSistema}`);
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : data.results || [];
+        if (list.length > 0) {
+          const item = list[0];
+          setUltimaTransmision({
+            origen: item.origen || (item.comando?.includes("Receta") ? "Receta Programada" : "Comando Manual"),
+            tipoOperacion: item.accion || item.comando || "Comando MQTT",
+            usuario: item.usuario || "Operador SCADA",
+            timestamp: item.timestamp ? new Date(item.timestamp).toLocaleString("es-AR") : new Date().toLocaleString("es-AR"),
+            descripcion: item.detalles || item.payload_json || JSON.stringify(item.parametros || {}),
+          });
+        } else {
+          setUltimaTransmision(null);
+        }
+      }
+    } catch (e) {
+      console.warn("Error cargando última transmisión:", e);
+    }
+  };
+
+  // Transmitir un comando personalizado desde los mapeos MQTT
+  const handleCustomCommandClick = async (cmd: any) => {
+    try {
+      toast.info(`Publicando comando '${cmd.nombre_accion || cmd.nombre}'...`);
+      const resp = await apiFetch("/api/v1/auditoria/transmitir/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topico: cmd.plantilla_topico,
+          payload: cmd.plantilla_payload_json,
+          sistema_id: selectedSistema !== 'seleccionar' ? selectedSistema : undefined,
+          origen: "Comando Manual Custom"
+        }),
+      });
+
+      if (resp.ok) {
+        toast.success(`Comando '${cmd.nombre}' publicado correctamente por MQTT`);
+        loadUltimaTransmision();
+      } else {
+        toast.error(`Error al transmitir comando '${cmd.nombre}'`);
+      }
+    } catch (e) {
+      toast.error("Error de comunicación al transmitir comando MQTT");
+    }
+  };
+
   useEffect(() => {
     loadDispositivos();
     loadFiltros();
     loadMqttConfig();
+    fetchCustomComandos();
   }, []);
+
+  useEffect(() => {
+    if (selectedSistema !== 'seleccionar') {
+      loadUltimaTransmision();
+    }
+  }, [selectedSistema]);
 
   // Fullscreen event listener
   useEffect(() => {
@@ -257,6 +396,12 @@ const VisualizacionSCADA = () => {
     ? `${Math.max(0, Math.min(100, Math.round(100 - (totalMin / 150) * 100)))}%` 
     : "0%";
 
+  // Objetos seleccionados
+  const selectedPlantaObj = useMemo(() => plantas.find(p => String(p.id) === selectedPlanta), [plantas, selectedPlanta]);
+  const selectedSeccionObj = useMemo(() => secciones.find(s => String(s.id) === selectedSeccion), [secciones, selectedSeccion]);
+  const selectedSistemaObj = useMemo(() => sistemas.find(s => String(s.id) === selectedSistema), [sistemas, selectedSistema]);
+  const isSelectionIncomplete = selectedPlanta === 'seleccionar' || selectedSeccion === 'seleccionar' || selectedSistema === 'seleccionar';
+
   // Filtros dinámicos basados en la selección de Planta
   const filteredSecciones = useMemo(() => {
     if (selectedPlanta === 'seleccionar') return [];
@@ -305,11 +450,10 @@ const VisualizacionSCADA = () => {
       }
     });
 
-    // Filtrar controles por la sección/sistema seleccionados o mantener controles generales si no hay restricción estricta
     return mappedControls.filter(control => {
       if (selectedSeccion === 'todas' && selectedSistema === 'todas') return true;
       const dev = dispositivos.find(d => d.numero_serie === control.id);
-      if (!dev) return true; // mantener fallbacks de control
+      if (!dev) return true;
       if (selectedSeccion !== 'todas' && dev.seccion && String(dev.seccion) !== selectedSeccion) return false;
       if (selectedSistema !== 'todas' && dev.sistema && String(dev.sistema) !== selectedSistema) return false;
       return true;
@@ -344,363 +488,294 @@ const VisualizacionSCADA = () => {
             Monitoreo en tiempo real de variables físicas y control de actuadores
           </p>
         </div>
-        <Button 
-          onClick={() => setIsReposicionOpen(true)} 
-          className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-md"
-        >
-          <RefreshCw className="h-4 w-4" /> Control de Reposición (Bombos)
-        </Button>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-        {/* Main SCADA Diagram & Process Controls */}
-        <div className="xl:col-span-3 space-y-4">
-          <Card className="bg-card border-border shadow-md" ref={containerRef}>
-            <CardHeader className="pb-3 bg-card border-b border-border/50">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                <CardTitle className="text-lg font-medium flex items-center gap-2">
-                  <Activity className="h-5 w-5 text-primary" />
-                  Diagrama de Proceso en Tiempo Real
-                </CardTitle>
-                
-                {/* Real Database Dropdown Selectors */}
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* Select Planta */}
-                  <Select value={selectedPlanta} onValueChange={(val) => {
-                    setSelectedPlanta(val);
-                    setSelectedSeccion('seleccionar');
-                    setSelectedSistema('seleccionar');
-                  }}>
-                    <SelectTrigger className="w-[180px] bg-background border-border h-9 text-xs">
-                      <SelectValue placeholder="--- Seleccionar Planta ---" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-card border-border">
-                      <SelectItem value="seleccionar">--- Seleccionar Planta ---</SelectItem>
-                      {plantas.map(p => (
-                        <SelectItem key={p.id} value={String(p.id)}>🏭 {p.nombre}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+      {/* Layout Principal: Diagrama SCADA a Ancho Completo */}
+      <div className="space-y-6">
+        {/* Main SCADA Diagram (Full Width) */}
+        <Card className="bg-card border-border shadow-md w-full" ref={containerRef}>
+          <CardHeader className="pb-3 bg-card border-b border-border/50 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle className="text-lg font-medium flex items-center gap-2">
+                <Activity className="h-5 w-5 text-primary" />
+                Diagrama de Proceso en Tiempo Real
+              </CardTitle>
 
-                  {/* Select Sección */}
-                  <Select value={selectedSeccion} onValueChange={(val) => {
-                    setSelectedSeccion(val);
-                    setSelectedSistema('seleccionar');
-                  }} disabled={selectedPlanta === 'seleccionar'}>
-                    <SelectTrigger className="w-[180px] bg-background border-border h-9 text-xs">
-                      <SelectValue placeholder="--- Seleccionar Sección ---" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-card border-border">
-                      <SelectItem value="seleccionar">--- Seleccionar Sección ---</SelectItem>
-                      {filteredSecciones.map(s => (
-                        <SelectItem key={s.id} value={String(s.id)}>📂 {s.nombre}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  {/* Select Sistema */}
-                  <Select value={selectedSistema} onValueChange={setSelectedSistema} disabled={selectedSeccion === 'seleccionar'}>
-                    <SelectTrigger className="w-[180px] bg-background border-border h-9 text-xs">
-                      <SelectValue placeholder="--- Seleccionar Sistema ---" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-card border-border">
-                      <SelectItem value="seleccionar">--- Seleccionar Sistema ---</SelectItem>
-                      {filteredSistemas.map(sys => (
-                        <SelectItem key={sys.id} value={String(sys.id)}>⚙️ {sys.nombre}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <div className="flex items-center gap-1 border-l border-border pl-2 ml-1">
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => {
-                        const sysObj = selectedSistema !== 'todas' ? sistemas.find(s => String(s.id) === selectedSistema) : null;
-                        const tipo = sysObj?.tipo_sistema || "EMPAQUE";
-                        const nombre = sysObj?.nombre || "Sistema SCADA";
-                        openDinamicoModal(tipo, nombre);
-                      }}
-                      className="h-9 px-3 gap-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-medium shadow-sm"
-                      title="Transmitir comandos y acciones MQTT configuradas para este sistema"
-                    >
-                      <Cpu className="h-4 w-4" />
-                      Acciones MQTT
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsReposicionOpen(true)}
-                      className="h-9 px-3 gap-1.5 bg-slate-800 text-cyan-300 border-slate-700 font-medium"
-                      title="Abrir panel de control de reposición de materia prima (Bombos 1/2)"
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                      Control Reposición
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => loadDispositivos()} className="h-9 px-3">
-                      <RotateCcw className="h-4 w-4 text-slate-300" />
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={toggleFullscreen} className="h-9 px-3">
-                      <Maximize2 className="h-4 w-4 text-slate-300" />
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => setIsConfigOpen(true)} className="h-9 px-3">
-                      <Settings className="h-4 w-4 text-slate-300" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Current View Badge */}
-              <div className="flex items-center gap-2 mt-2">
+              {/* Current View & Gateway Badges */}
+              <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary" className="text-xs bg-muted/50 border border-border">
                   <Filter className="h-3 w-3 mr-1 text-primary" />
                   Ubicación: {currentViewLabel}
                 </Badge>
+
+                {selectedSistema !== 'seleccionar' && selectedSistema !== 'todas' && (
+                  <Badge variant="outline" className="text-xs font-mono bg-cyan-950/40 text-cyan-300 border-cyan-800/80 gap-1.5">
+                    <Cpu className="h-3 w-3 text-cyan-400" />
+                    Gateway: <span className="font-bold text-cyan-200">d83add60dbb0</span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" title="Gateway Online"></span>
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            {/* Bar of Dropdown Selectors and Action Controls */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
+              {/* Real Database Dropdown Selectors */}
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
+                {/* Select Planta */}
+                <Select value={selectedPlanta} onValueChange={(val) => {
+                  setSelectedPlanta(val);
+                  setSelectedSeccion('seleccionar');
+                  setSelectedSistema('seleccionar');
+                }}>
+                  <SelectTrigger className="w-[170px] bg-background border-border h-9 text-xs">
+                    <SelectValue placeholder="--- Seleccionar Planta ---" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="seleccionar">--- Seleccionar Planta ---</SelectItem>
+                    {plantas.map(p => (
+                      <SelectItem key={p.id} value={String(p.id)}>🏭 {p.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Select Sección */}
+                <Select value={selectedSeccion} onValueChange={(val) => {
+                  setSelectedSeccion(val);
+                  setSelectedSistema('seleccionar');
+                }} disabled={selectedPlanta === 'seleccionar'}>
+                  <SelectTrigger className="w-[170px] bg-background border-border h-9 text-xs">
+                    <SelectValue placeholder="--- Seleccionar Sección ---" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="seleccionar">--- Seleccionar Sección ---</SelectItem>
+                    {filteredSecciones.map(s => (
+                      <SelectItem key={s.id} value={String(s.id)}>📂 {s.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Select Sistema */}
+                <Select value={selectedSistema} onValueChange={setSelectedSistema} disabled={selectedSeccion === 'seleccionar'}>
+                  <SelectTrigger className="w-[170px] bg-background border-border h-9 text-xs">
+                    <SelectValue placeholder="--- Seleccionar Sistema ---" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="seleccionar">--- Seleccionar Sistema ---</SelectItem>
+                    {filteredSistemas.map(sys => (
+                      <SelectItem key={sys.id} value={String(sys.id)}>⚙️ {sys.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {selectedSistema !== 'seleccionar' && selectedSistemaObj && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOpenEditSistema}
+                    className="h-9 px-2 bg-slate-900 border-cyan-800 text-cyan-300 hover:bg-slate-800 text-xs gap-1 font-semibold"
+                    title="Editar tipo de proceso (Fluidos, Sólidos, Empaque, etc.) para este sistema"
+                  >
+                    <Edit className="h-3.5 w-3.5" />
+                    Editar Sistema
+                  </Button>
+                )}
+              </div>
+
+              {/* SCADA Action Buttons */}
+              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsGestorComandosOpen(true)}
+                  className="h-8 px-2.5 gap-1.5 bg-slate-900 hover:bg-slate-800 text-cyan-300 border-cyan-700/60 font-semibold text-xs shadow-sm"
+                  title="Configurar y añadir botones, tópicos MQTT y payloads JSON para este sistema"
+                >
+                  <Settings className="h-3.5 w-3.5 text-cyan-400" />
+                  ⚙️ Personalizar Comandos
+                </Button>
+
+                <div className="flex items-center gap-1 pl-1 border-l border-border/80">
+                  <Button variant="outline" size="sm" onClick={() => loadDispositivos()} className="h-8 w-8 p-0" title="Actualizar dispositivos">
+                    <RotateCcw className="h-3.5 w-3.5 text-slate-300" />
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={toggleFullscreen} className="h-8 w-8 p-0" title="Pantalla completa">
+                    <Maximize2 className="h-3.5 w-3.5 text-slate-300" />
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setIsConfigOpen(true)} className="h-8 w-8 p-0" title="Configuración MQTT">
+                    <Settings className="h-3.5 w-3.5 text-slate-300" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className={isFullscreen ? "p-6 h-[85vh] bg-card" : "p-6"}>
+            {/* Dynamic SCADA Flow Diagram */}
+            <ScadaFlowDiagram 
+              selectedView="planta-completa" 
+              selectedPlanta={selectedPlanta} 
+              selectedSeccion={selectedSeccion} 
+              selectedSistema={selectedSistema} 
+              secciones={secciones}
+              sistemas={sistemas}
+              plantas={plantas}
+            />
+            
+            {/* Legend */}
+            <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded bg-primary" />
+                <span>Tanques</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded bg-success" />
+                <span>Bombas</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded bg-warning" />
+                <span>Válvulas</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded bg-info" />
+                <span>Mezcladores</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-muted-foreground" />
+                <span>Sensores</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Bottom Section: 2-Column Grid for Receta Activa & Dynamic Process Controls */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Card 1: Receta Activa */}
+          <Card className="bg-card border-border shadow-md">
+            <CardHeader className="pb-3 border-b border-border/50">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-semibold flex items-center gap-2 text-foreground">
+                  <FlaskConical className="h-4 w-4 text-cyan-400" />
+                  Receta Activa del Sistema
+                </CardTitle>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground" 
+                  onClick={loadUltimaTransmision}
+                  title="Actualizar información de la receta"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </Button>
               </div>
             </CardHeader>
-            <CardContent className={isFullscreen ? "p-6 h-[85vh] bg-card" : "p-6"}>
-              {/* Dynamic SCADA Flow Diagram */}
-              <ScadaFlowDiagram 
-                selectedView="planta-completa" 
-                selectedPlanta={selectedPlanta} 
-                selectedSeccion={selectedSeccion} 
-                selectedSistema={selectedSistema} 
-                secciones={secciones}
-                sistemas={sistemas}
-                plantas={plantas}
-              />
-              
-              {/* Legend */}
-              <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded bg-primary" />
-                  <span>Tanques</span>
+            <CardContent className="p-5">
+              {isSelectionIncomplete ? (
+                <div className="p-6 text-center space-y-3 text-muted-foreground bg-muted/20 rounded-lg border border-dashed border-border">
+                  <AlertCircle className="h-9 w-9 text-cyan-400 mx-auto opacity-80 animate-pulse" />
+                  <p className="text-sm font-semibold text-foreground">Sin Sistema Seleccionado</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Selecciona una <strong className="text-cyan-300">Planta</strong>, <strong className="text-cyan-300">Sección</strong> y <strong className="text-cyan-300">Sistema</strong> en los filtros superiores para consultar la receta activa del proceso.
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded bg-success" />
-                  <span>Bombas</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded bg-warning" />
-                  <span>Válvulas</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded bg-info" />
-                  <span>Mezcladores</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-muted-foreground" />
-                  <span>Sensores</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Process Controls */}
-          <Card className="bg-card border-border shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <span className="text-sm text-muted-foreground">
-                    Estado del Proceso:
-                  </span>
-                  <Badge className={isRunning ? "bg-success/20 text-success border-success/30" : "bg-muted text-muted-foreground"}>
-                    {isRunning ? "En Ejecución" : "Detenido"}
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => handleControlClick('proceso', 'Detener')}
-                    disabled={!isRunning}
-                  >
-                    <Pause className="h-4 w-4 mr-2" />
-                    Pausar
-                  </Button>
-                  <Button 
-                    size="sm"
-                    onClick={() => handleControlClick('proceso', 'Iniciar')}
-                    disabled={isRunning}
-                  >
-                    <Play className="h-4 w-4 mr-2" />
-                    Iniciar
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right Side Panel */}
-        <div className="xl:col-span-1 space-y-4">
-          <Card className="bg-card border-border shadow-md">
-            <CardContent className="p-0">
-              <Tabs defaultValue="receta" className="w-full">
-                <TabsList className="w-full grid grid-cols-2 rounded-none border-b border-border bg-transparent h-auto p-0">
-                  <TabsTrigger
-                    value="receta"
-                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3"
-                  >
-                    Receta Activa
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="controles"
-                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3"
-                  >
-                    Controles
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="receta" className="p-4 mt-0">
-                  <div className="space-y-4">
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="text-sm font-medium text-foreground">
-                        Producto Actual
-                      </h4>
-                      <p className="text-lg font-semibold text-primary mt-1">
-                        Lote A-2024-0156
+                      <p className="text-base font-bold text-primary truncate">
+                        {selectedSistemaObj?.nombre || "Sistema SCADA"}
+                      </p>
+                      <span className="text-xs font-mono text-muted-foreground block">
+                        {selectedPlantaObj?.nombre || "Planta"} / {selectedSeccionObj?.nombre || "A1"}
+                      </span>
+                    </div>
+                    <Badge variant="outline" className="text-xs font-mono bg-cyan-950/40 text-cyan-400 border-cyan-800">
+                      {selectedSistemaObj?.tipo_sistema || "FLUIDOS"}
+                    </Badge>
+                  </div>
+
+                  <Separator />
+
+                  {ultimaTransmision ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          Última Operación Transmitida
+                        </span>
+                        <Badge variant="outline" className={cn(
+                          "text-xs font-semibold px-2.5 py-0.5",
+                          ultimaTransmision.origen === "Receta Programada" 
+                            ? "bg-cyan-950/40 text-cyan-300 border-cyan-800" 
+                            : "bg-emerald-950/40 text-emerald-300 border-emerald-800"
+                        )}>
+                          {ultimaTransmision.origen}
+                        </Badge>
+                      </div>
+
+                      <div className="p-3.5 rounded-lg bg-muted/30 border border-border/80 space-y-2 text-xs">
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">Tipo de Acción:</span>
+                          <span className="font-semibold text-foreground font-mono">{ultimaTransmision.tipoOperacion}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">Operador / Usuario:</span>
+                          <span className="font-mono text-primary font-semibold">{ultimaTransmision.usuario}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">Fecha / Hora:</span>
+                          <span className="font-mono text-muted-foreground">{ultimaTransmision.timestamp}</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h5 className="text-[11px] font-semibold text-cyan-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                          <Droplet className="h-3.5 w-3.5" />
+                          Parámetros Transmitidos al Broker
+                        </h5>
+                        <div className="p-3 rounded bg-muted/40 border border-border/50 text-xs font-mono text-foreground leading-relaxed break-words">
+                          {ultimaTransmision.descripcion}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5 py-4">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Estado del Bus</span>
+                        <Badge variant="outline" className="bg-success/20 text-success border-success/30 text-xs">
+                          Listo / En Espera
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground italic text-center py-2">
+                        Sin transmisiones recientes registradas para este sistema.
                       </p>
                     </div>
-                    <Separator />
-                    <div className="space-y-3">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Receta</span>
-                        <span className="text-foreground">{procesoDev && totalMin && totalMin > 0 ? "REC-001" : "Ninguna"}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Fase</span>
-                        <span className="text-foreground">{faseProceso}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Progreso</span>
-                        <span className="text-foreground font-mono">{progresoProceso}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Tiempo Est.</span>
-                        <span className="text-foreground font-mono">{tiempoEst}</span>
-                      </div>
-                    </div>
-                    <Separator />
-                    <div>
-                      <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                        Ingredientes
-                      </h5>
-                      <ul className="space-y-1 text-sm">
-                        <li className="flex justify-between">
-                          <span className="text-muted-foreground">Componente A</span>
-                          <span className="text-foreground">45kg</span>
-                        </li>
-                        <li className="flex justify-between">
-                          <span className="text-muted-foreground">Componente B</span>
-                          <span className="text-foreground">28kg</span>
-                        </li>
-                        <li className="flex justify-between">
-                          <span className="text-muted-foreground">Aditivo X</span>
-                          <span className="text-foreground">2.5kg</span>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="controles" className="p-4 mt-0">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-medium text-foreground">
-                        Controles Manuales
-                      </h4>
-                      <Badge variant="outline" className="text-xs">
-                        {relevantControls.length} disponibles
-                      </Badge>
-                    </div>
-
-                    {/* Botones de Control por Tipo de Sistema */}
-                    <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-700/60 space-y-2">
-                      <div className="text-xs font-semibold text-slate-300">Paneles por Tipo de Sistema</div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openDinamicoModal("EMPAQUE", "Empaquetadora L1")}
-                          className="h-8 text-[11px] justify-start gap-1.5 bg-emerald-950/30 text-emerald-300 border-emerald-800/50 hover:bg-emerald-900/40"
-                        >
-                          <PackageCheck className="h-3.5 w-3.5" />
-                          Empaquetadora
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openDinamicoModal("TEMPERATURA", "Horno / Temperatura")}
-                          className="h-8 text-[11px] justify-start gap-1.5 bg-amber-950/30 text-amber-300 border-amber-800/50 hover:bg-amber-900/40"
-                        >
-                          <Thermometer className="h-3.5 w-3.5" />
-                          Temperatura
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openDinamicoModal("SOLIDOS", "Procesado Sólidos")}
-                          className="h-8 text-[11px] justify-start gap-1.5 bg-indigo-950/30 text-indigo-300 border-indigo-800/50 hover:bg-indigo-900/40"
-                        >
-                          <Sliders className="h-3.5 w-3.5" />
-                          Sólidos
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setIsReposicionOpen(true)}
-                          className="h-8 text-[11px] justify-start gap-1.5 bg-cyan-950/30 text-cyan-300 border-cyan-800/50 hover:bg-cyan-900/40"
-                        >
-                          <RefreshCw className="h-3.5 w-3.5" />
-                          Líquidos
-                        </Button>
-                      </div>
-                    </div>
-                    
-                    {relevantControls.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground text-sm">
-                        No hay controles disponibles para esta ubicación/sección
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {relevantControls.map((control) => (
-                          <div key={control.id} className="p-3 rounded-lg bg-background/50 border border-border shadow-xs">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm text-foreground">{control.label}</span>
-                              <Badge 
-                                variant="outline" 
-                                className={`text-xs ${
-                                  control.statusColor === 'success' 
-                                    ? 'bg-success/20 text-success border-success/30' 
-                                    : 'bg-muted text-muted-foreground border-muted'
-                                }`}
-                              >
-                                {control.status}
-                              </Badge>
-                            </div>
-                            <div className="flex gap-2">
-                              {control.actions.map((action) => (
-                                <Button 
-                                  key={action} 
-                                  variant="outline" 
-                                  size="sm" 
-                                  className="flex-1 hover:bg-primary hover:text-primary-foreground"
-                                  onClick={() => handleControlClick(control.id, action)}
-                                >
-                                  {action}
-                                </Button>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </TabsContent>
-              </Tabs>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
+
+          {/* Card 2: Dynamic Process Controls */}
+          <DynamicScadaPanels
+            selectedSistemaId={selectedSistemaObj?.id}
+            selectedSistemaNombre={selectedSistemaObj?.nombre || "Sistema SCADA"}
+            selectedSeccionNombre={selectedSeccionObj?.nombre || "A1"}
+            selectedPlantaNombre={selectedPlantaObj?.nombre || "Planta Principal"}
+            refreshTrigger={panelsRefreshKey}
+            onOpenGestorComandos={() => {
+              setControlToEdit(null);
+              setIsGestorComandosOpen(true);
+            }}
+            onEditControl={(ctrl) => {
+              setControlToEdit(ctrl);
+              setIsGestorComandosOpen(true);
+            }}
+            onCommandExecuted={() => loadUltimaTransmision()}
+            onComandosUpdated={() => {
+              fetchCustomComandos();
+              setPanelsRefreshKey((prev) => prev + 1);
+            }}
+          />
         </div>
       </div>
 
@@ -804,7 +879,22 @@ const VisualizacionSCADA = () => {
       </Dialog>
 
       {/* Modal de Control de Reposición (Bombos) */}
-      <ControlReposicionModal open={isReposicionOpen} onOpenChange={setIsReposicionOpen} />
+      <ControlReposicionModal
+        open={isReposicionOpen}
+        onOpenChange={setIsReposicionOpen}
+        plantaNombre={selectedPlantaObj?.nombre}
+        seccionNombre={selectedSeccionObj?.nombre}
+        sistemaNombre={selectedSistemaObj?.nombre}
+      />
+
+      {/* Modal de Control de Receta y Mezcla de Líquidos */}
+      <ControlRecetaLiquidosModal
+        open={isRecetaLiquidosOpen}
+        onOpenChange={setIsRecetaLiquidosOpen}
+        plantaNombre={selectedPlantaObj?.nombre}
+        seccionNombre={selectedSeccionObj?.nombre}
+        sistemaNombre={selectedSistemaObj?.nombre}
+      />
 
       {/* Modal de Control Dinámico (Empaquetadora / Hornos / Sólidos) */}
       <ControlDinamicoModal
@@ -813,6 +903,83 @@ const VisualizacionSCADA = () => {
         tipoSistema={dinamicoTipoSistema}
         nombreSistema={dinamicoNombreSistema}
       />
+
+      {/* Modal Personalizador de Botones y Comandos MQTT */}
+      <GestorComandosModal
+        open={isGestorComandosOpen}
+        onOpenChange={(val) => {
+          setIsGestorComandosOpen(val);
+          if (!val) setControlToEdit(null);
+        }}
+        selectedSistemaId={selectedSistemaObj?.id}
+        selectedSistemaNombre={selectedSistemaObj?.nombre || "Sistema SCADA"}
+        selectedTipoSistema={selectedSistemaObj?.tipo_sistema || "MEZCLADO"}
+        onComandosUpdated={() => {
+          fetchCustomComandos();
+          setPanelsRefreshKey((prev) => prev + 1);
+        }}
+        initialControlToEdit={controlToEdit}
+      />
+
+      {/* Modal Editar Tipo de Sistema */}
+      <Dialog open={isEditSistemaOpen} onOpenChange={setIsEditSistemaOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-slate-950 border-slate-800 text-slate-100">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-cyan-400">
+              <Edit className="h-5 w-5" />
+              Configurar Sistema: {formSistema.nombre}
+            </DialogTitle>
+            <DialogDescription className="text-slate-400 text-xs">
+              Modifica el nombre y el Tipo de Proceso (Fluidos, Sólidos, Empaque, Temperatura) asociado a este sistema.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-3 text-xs">
+            <div className="space-y-1.5">
+              <Label className="text-slate-300">Nombre del Sistema</Label>
+              <Input
+                value={formSistema.nombre}
+                onChange={(e) => setFormSistema({ ...formSistema, nombre: e.target.value })}
+                className="bg-slate-900 border-slate-700 text-slate-100 h-9"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-slate-300 font-semibold">Tipo de Sistema / Proceso Industrial</Label>
+              <Select
+                value={formSistema.tipo_sistema}
+                onValueChange={(val) => setFormSistema({ ...formSistema, tipo_sistema: val })}
+              >
+                <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100 h-9 font-semibold text-cyan-300">
+                  <SelectValue placeholder="Seleccionar tipo de sistema" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-900 border-slate-800 text-slate-100">
+                  <SelectItem value="FLUIDOS">🧪 Fluidos / Líquidos (Tanques, Bombas, Mezcla)</SelectItem>
+                  <SelectItem value="SOLIDOS">📦 Procesamiento de Sólidos (Silos, Cintas)</SelectItem>
+                  <SelectItem value="EMPAQUE">📦 Empaquetado y Envasado (Empaquetadoras)</SelectItem>
+                  <SelectItem value="TEMPERATURA">🔥 Control de Temperatura (Hornos, Calderas)</SelectItem>
+                  <SelectItem value="GENERAL">🌐 Sistema General</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-slate-300">Descripción (Opcional)</Label>
+              <Input
+                value={formSistema.descripcion}
+                onChange={(e) => setFormSistema({ ...formSistema, descripcion: e.target.value })}
+                placeholder="Descripción del proceso o componentes..."
+                className="bg-slate-900 border-slate-700 text-slate-100 h-9"
+              />
+            </div>
+          </div>
+          <DialogFooter className="pt-2 border-t border-slate-800">
+            <Button variant="ghost" size="sm" onClick={() => setIsEditSistemaOpen(false)} className="text-xs text-slate-400">
+              Cancelar
+            </Button>
+            <Button size="sm" onClick={handleSaveSistema} className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs gap-1.5 font-bold">
+              Guardar Cambios
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
