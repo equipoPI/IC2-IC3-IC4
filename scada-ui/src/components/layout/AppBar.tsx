@@ -46,9 +46,11 @@ const AppBar = ({ onMenuClick, onLogout }: AppBarProps) => {
           </Button>
           
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">SC</span>
-            </div>
+            <img 
+              src="/favicon.svg" 
+              alt="SCADA Logo" 
+              className="w-9 h-9 rounded-lg p-0.5 bg-slate-900 border border-cyan-500/30 shadow-[0_0_12px_rgba(0,229,255,0.3)] object-contain" 
+            />
             <div>
               <h1 className="text-lg font-medium text-foreground">
                 Sistema de Gestión SCADA

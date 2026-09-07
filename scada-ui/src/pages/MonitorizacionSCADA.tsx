@@ -468,7 +468,7 @@ const MonitorizacionSCADA = () => {
     loadPlantas();
     loadEstructura();
 
-    // 1. Refresco liviano de telemetría cada 3s (solo en modo live)
+    // 1. Refresco liviano de telemetría cada 1s (solo en modo live)
     const telemetryInterval = setInterval(() => {
       if (activeTab === "historico" && modoConsultaRef.current !== "live") {
         return; // Pausa completa si está analizando gráficos históricos
@@ -476,7 +476,7 @@ const MonitorizacionSCADA = () => {
       if (selectedDispositivoIdRef.current && modoConsultaRef.current === "live") {
         loadLecturasSensor(selectedDispositivoIdRef.current);
       }
-    }, 3000);
+    }, 1000);
 
     // 2. Refresco pesado de estructura de plantas y secciones en segundo plano cada 15s (solo en pestaña "plantas")
     const heavyInterval = setInterval(() => {

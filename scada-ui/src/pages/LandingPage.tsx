@@ -55,9 +55,11 @@ const LandingPage = () => {
       <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
-              <Factory className="w-6 h-6 text-primary" />
-            </div>
+            <img 
+              src="/favicon.svg" 
+              alt="SCADA Emblem" 
+              className="w-10 h-10 rounded-lg p-0.5 bg-slate-900 border border-cyan-500/40 shadow-[0_0_12px_rgba(0,229,255,0.4)] object-contain" 
+            />
             <span className="font-semibold text-lg hidden sm:block">SCADA Control</span>
           </div>
           <div className="flex items-center gap-3">
@@ -88,7 +90,12 @@ const LandingPage = () => {
         <div className="absolute top-20 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-3xl" />
         <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-accent/10 rounded-full blur-3xl" />
 
-        <div className="container mx-auto text-center relative z-10">
+        <div className="container mx-auto text-center relative z-10 flex flex-col items-center">
+          <img 
+            src="/favicon.svg" 
+            alt="SCADA Logo" 
+            className="w-20 h-20 mb-6 rounded-2xl p-2 bg-slate-900 border-2 border-cyan-500/50 shadow-[0_0_30px_rgba(0,229,255,0.5)] object-contain transition-transform hover:scale-105" 
+          />
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm mb-8">
             <Wifi className="w-4 h-4" />
             Plataforma Industrial de Nueva Generación
@@ -127,10 +134,10 @@ const LandingPage = () => {
         <div className="container mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Capacidades del Sistema
+              Capacidades Avanzadas del Sistema SCADA
             </h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Una solución integral para la gestión y supervisión de plantas industriales
+              Una solución integral multiusuario para la gestión, supervisión y automatización de plantas industriales en tiempo real.
             </p>
           </div>
 
@@ -193,9 +200,11 @@ const LandingPage = () => {
       <footer className="py-8 px-4 border-t border-border/30">
         <div className="container mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-              <Factory className="w-4 h-4 text-primary" />
-            </div>
+            <img 
+              src="/favicon.svg" 
+              alt="SCADA Logo" 
+              className="w-7 h-7 rounded-md p-0.5 bg-slate-900 border border-cyan-500/40 shadow-[0_0_8px_rgba(0,229,255,0.3)] object-contain" 
+            />
             <span className="text-sm text-muted-foreground">
               Sistema de Gestión SCADA © {new Date().getFullYear()}
             </span>

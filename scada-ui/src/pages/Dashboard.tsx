@@ -26,12 +26,13 @@ const Dashboard = () => {
     let mounted = true;
     const load = async () => {
       try {
-        // Pedir fabricas, empleados, dispositivos y auditoria
-        const [fabrResp, empResp, dispResp, audResp] = await Promise.allSettled([
+        // Pedir fabricas, empleados, dispositivos, auditoria y alarmas
+        const [fabrResp, empResp, dispResp, audResp, almResp] = await Promise.allSettled([
           apiFetch('/api/v1/fabricas/'),
           apiFetch('/api/v1/empleados/'),
           apiFetch('/api/v1/dispositivos/'),
           apiFetch('/api/v1/auditoria/?page_size=5'),
+          apiFetch('/api/v1/alarmas/'),
         ]);
 
         // Fabricas
@@ -39,6 +40,16 @@ const Dashboard = () => {
         if (fabrResp.status === 'fulfilled' && fabrResp.value.ok) {
           const jf = await fabrResp.value.json();
           fabricas = jf.results || jf || [];
+        }
+
+        // Alarmas activas
+        let activeAlarmsCount = 0;
+        if (almResp.status === 'fulfilled' && almResp.value.ok) {
+          const ja = await almResp.value.json();
+          const list = Array.isArray(ja) ? ja : ja.results || [];
+          activeAlarmsCount = list.filter((a: any) => String(a.estado || '').toLowerCase() === 'abierta').length;
+        } else {
+          activeAlarmsCount = fabricas.reduce((acc, f) => acc + (Number(f.alarmas_activas || 0)), 0);
         }
 
         // Empleados
@@ -86,7 +97,7 @@ const Dashboard = () => {
           { title: 'Plantas Activas', value: `${fabricas.filter(f => (f.estado || '').toString().toLowerCase().includes('oper')).length}/${fabricas.length}`, change: '', icon: Factory, trend: 'up' },
           { title: 'Empleados en Turno', value: empleadosCount !== null ? String(empleadosCount) : '-', change: '', icon: Users, trend: 'up' },
           { title: 'Sensores Online', value: onlineSensorsStr, change: '', icon: Cpu, trend: 'up' },
-          { title: 'Alarmas Activas', value: String(fabricas.reduce((acc, f) => acc + (Number(f.alarmas_activas || 0)), 0)), change: '', icon: AlertTriangle, trend: 'down' },
+          { title: 'Alarmas Activas', value: String(activeAlarmsCount), change: '', icon: AlertTriangle, trend: 'down' },
         ]);
 
         // Plantas resumen: usar fabricas si vienen

@@ -242,9 +242,9 @@ const GuiaSistema = () => {
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Estructura del Tópico */}
-              <div>
-                <h3 className="text-md font-bold text-foreground mb-3">Estructura del Tópico Estándar</h3>
-                <div className="bg-muted p-4 rounded-lg font-mono text-sm border border-border flex items-center justify-between overflow-x-auto">
+              <div className="space-y-4">
+                <h3 className="text-md font-bold text-foreground">Estructura del Tópico de Telemetría (Ingesta)</h3>
+                <div className="bg-muted p-4 rounded-lg font-mono text-xs border border-border flex items-center justify-between overflow-x-auto">
                   <span className="text-primary font-bold">tenant</span>
                   <span className="text-muted-foreground">/</span>
                   <span className="text-emerald-500 font-bold">gateway_id</span>
@@ -256,6 +256,18 @@ const GuiaSistema = () => {
                   <span className="text-purple-400 font-bold">categoria</span>
                   <span className="text-muted-foreground">/</span>
                   <span className="text-rose-500 font-bold">dispositivo_o_variable</span>
+                </div>
+
+                <h3 className="text-md font-bold text-foreground pt-2">Estructuras de Tópicos de Comandos Estándar</h3>
+                <div className="grid grid-cols-1 gap-2 text-xs font-mono">
+                  <div className="p-2.5 bg-card border border-emerald-500/30 rounded flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <span className="text-emerald-400 font-bold">1. Jerárquico Directo por Acción (Recomendado):</span>
+                    <code className="text-foreground font-mono bg-muted px-2 py-1 rounded">tenant/gateway_id/seccion/sistema/reposicion (o /mezcla)</code>
+                  </div>
+                  <div className="p-2.5 bg-card border border-cyan-500/30 rounded flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <span className="text-cyan-400 font-bold">2. Jerárquico General + Payload JSON:</span>
+                    <code className="text-foreground font-mono bg-muted px-2 py-1 rounded">tenant/gateway_id/seccion/sistema/accion</code>
+                  </div>
                 </div>
               </div>
 

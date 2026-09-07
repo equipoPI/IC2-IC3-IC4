@@ -33,7 +33,7 @@ interface SidebarProps {
 
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const [openGroups, setOpenGroups] = useState<string[]>(["Producción y Control"]);
-  const { isAdmin } = useAuth();
+  const { usuario, isAdmin } = useAuth();
 
   const [stats, setStats] = useState<{ total: number; online: number; lastTime: string }>({
     total: 0,
@@ -54,27 +54,22 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
 
           list.forEach((d: any) => {
             const st = String(d.estado || '').toUpperCase();
-            const isOnlineState = st === 'ONLINE' || st === 'OPERATIVO' || st === 'ACTIVE' || st === 'ACTIVO';
-            let isRecent = false;
+            const isOffline = st.includes('OFF') || st.includes('DESCONECT') || st.includes('INACTIV');
 
             if (d.ultima_lectura) {
               const ms = new Date(d.ultima_lectura).getTime();
-              if (!isNaN(ms)) {
-                if (ms > latestTimestamp) latestTimestamp = ms;
-                if (Math.abs(now - ms) < 10 * 60 * 1000) {
-                  isRecent = true;
-                }
+              if (!isNaN(ms) && ms > latestTimestamp) {
+                latestTimestamp = ms;
               }
             }
 
-            if (isOnlineState || isRecent || (d.valor_lectura !== null && d.valor_lectura !== undefined)) {
+            if (!isOffline) {
               onlineCount++;
             }
           });
 
           const totalCount = list.length;
-          // Si existen dispositivos registrados y comunicando con el broker, marcar estado activo
-          const finalOnline = totalCount > 0 ? Math.max(onlineCount, list.filter((x: any) => String(x.estado).toUpperCase() !== 'OFFLINE').length || 1) : 0;
+          const finalOnline = onlineCount;
 
           setStats({
             total: totalCount,
@@ -98,8 +93,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     return () => clearInterval(interval);
   }, []);
 
-  const { usuario } = useAuth();
-  const rangoNum = Number(usuario?.rango || 1);
+  const rangoNum = Number(usuario?.rango || (isAdmin ? 8 : 1));
 
   const isPathAllowed = (path: string) => {
     if (rangoNum === 8) return true; // Administrador - Acceso total

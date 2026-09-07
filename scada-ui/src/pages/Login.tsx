@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Activity, Lock, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth, deriveRol } from "@/contexts/AuthContext";
+import { useAuth, buildUsuarioAutenticado } from "@/contexts/AuthContext";
 import {
   Select,
   SelectContent,
@@ -81,15 +81,11 @@ const Login = () => {
       // Obtener datos del usuario autenticado
       const userResp = await fetch('/api/v1/auth/user/', { credentials: 'include' });
       const userData = userResp.ok ? await userResp.json() : null;
-      const first_name = userData?.first_name || '';
-      const last_name = userData?.last_name || '';
-      const nombre = `${first_name} ${last_name}`.trim() || userData?.username || usuario;
-      // El rol se deriva del usuario devuelto por el backend (empleado.rango), no es fijo
-      const rol = deriveRol(userData);
 
-      // Pasar todos los campos disponibles al context para evitar estado incompleto
-      login({ id: String(userData?.id || Date.now()), nombre, first_name, last_name, rol, username: userData?.username, email: userData?.email });
-      toast({ title: 'Bienvenido', description: `Sesión iniciada como ${rol}` });
+      // Derivar objeto completo con rango y rol asegurados
+      const userObj = buildUsuarioAutenticado(userData || { username: usuario, email: usuario });
+      login(userObj);
+      toast({ title: 'Bienvenido', description: `Sesión iniciada como ${userObj.rol}` });
       navigate('/dashboard');
     } catch (err) {
       toast({ title: 'Error', description: String(err), variant: 'destructive' });
@@ -106,9 +102,11 @@ const Login = () => {
       <Card className="w-full max-w-md relative z-10 border-border/50 bg-card/95 backdrop-blur-sm shadow-2xl">
         <CardHeader className="text-center space-y-4 pb-2">
           <div className="flex flex-col items-center gap-3">
-            <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
-              <Activity className="h-10 w-10 text-primary" />
-            </div>
+            <img 
+              src="/favicon.svg" 
+              alt="SCADA Logo" 
+              className="h-14 w-14 rounded-xl p-1 bg-slate-900 border border-cyan-500/40 shadow-[0_0_16px_rgba(0,229,255,0.4)] object-contain" 
+            />
             <div>
               <CardTitle className="text-2xl font-bold text-foreground">
                 Sistema de Gestión SCADA

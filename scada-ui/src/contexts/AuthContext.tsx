@@ -12,6 +12,8 @@ export interface UsuarioAutenticado {
   rango?: string;
   username?: string;
   email?: string;
+  is_superuser?: boolean;
+  is_staff?: boolean;
 }
 
 export interface AuditLog {
@@ -28,20 +30,45 @@ export interface AuditLog {
 export const deriveRol = (u: any): RolUsuario => {
   try {
     if (u?.is_superuser) return 'Administrador';
-    const rango = u?.empleado?.rango || u?.profile?.rango || '';
+    const rango = u?.rango || u?.empleado?.rango || u?.profile?.rango || '';
     if (rango) {
       const r = String(rango);
       if (r === '8') return 'Administrador';
-      if (['1', '2', '3'].includes(r)) return 'Jefe de Sector';
+      if (['3', '4', '5', '6', '7'].includes(r)) return 'Jefe de Sector';
       return 'Operador';
     }
-    const role = u?.profile?.role || '';
-    if (role === 'admin') return 'Administrador';
-    if (role === 'manager') return 'Jefe de Sector';
+    const role = u?.profile?.role || u?.rol || '';
+    if (role === 'admin' || role === 'Administrador') return 'Administrador';
+    if (role === 'manager' || role === 'Jefe de Sector') return 'Jefe de Sector';
     return 'Operador';
   } catch (e) {
     return 'Operador';
   }
+};
+
+export const buildUsuarioAutenticado = (u: any): UsuarioAutenticado => {
+  if (!u) return null as any;
+  const first_name = u.first_name || '';
+  const last_name = u.last_name || '';
+  const nombre = `${first_name} ${last_name}`.trim() || u.username || u.email || '';
+  const is_superuser = Boolean(u.is_superuser);
+  const is_staff = Boolean(u.is_staff);
+  const rol = deriveRol(u);
+  const rawRango = u.rango || u.empleado?.rango || u.profile?.rango || '';
+  const rango = is_superuser ? '8' : String(rawRango || (rol === 'Administrador' ? '8' : '1'));
+
+  return {
+    id: String(u.id || ''),
+    nombre,
+    first_name,
+    last_name,
+    rol,
+    rango,
+    username: u.username,
+    email: u.email,
+    is_superuser,
+    is_staff,
+  };
 };
 
 interface AuthContextType {
@@ -69,12 +96,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const resp = await apiFetch('/api/v1/auth/user/');
         if (resp.ok) {
           const u = await resp.json();
-          const first_name = u.first_name || '';
-          const last_name = u.last_name || '';
-          const nombre = `${first_name} ${last_name}`.trim() || u.username || u.email || '';
-          const rol = deriveRol(u);
-          const rango = u.is_superuser ? '8' : String(u.empleado?.rango || u.profile?.rango || '');
-          setUsuario({ id: String(u.id), nombre, first_name, last_name, rol, rango, username: u.username, email: u.email });
+          setUsuario(buildUsuarioAutenticado(u));
         }
       } catch (e) {
         // silencioso
@@ -90,12 +112,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const resp = await apiFetch('/api/v1/auth/user/');
       if (resp.ok) {
         const u = await resp.json();
-        const first_name = u.first_name || '';
-        const last_name = u.last_name || '';
-        const nombre = `${first_name} ${last_name}`.trim() || u.username || u.email || '';
-        const rol = deriveRol(u);
-        const rango = u.is_superuser ? '8' : String(u.empleado?.rango || u.profile?.rango || '');
-        setUsuario({ id: String(u.id), nombre, first_name, last_name, rol, rango, username: u.username, email: u.email });
+        setUsuario(buildUsuarioAutenticado(u));
       } else {
         setUsuario(null);
       }
@@ -105,11 +122,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const login = (user: UsuarioAutenticado) => {
-    setUsuario(user);
+    const normalizedUser = buildUsuarioAutenticado(user);
+    setUsuario(normalizedUser);
     addAuditLog({
-      usuario: user.nombre,
+      usuario: normalizedUser.nombre,
       accion: 'Inicio de Sesión',
-      objetoAfectado: `Usuario ${user.nombre}`,
+      objetoAfectado: `Usuario ${normalizedUser.nombre}`,
       modulo: 'Autenticación',
     });
   };
@@ -157,7 +175,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         login,
         logout,
         refreshUser,
-        isAdmin: usuario?.rol === 'Administrador',
+        isAdmin: usuario?.rol === 'Administrador' || usuario?.rango === '8' || Boolean(usuario?.is_superuser),
         auditLogs,
         addAuditLog,
       }}

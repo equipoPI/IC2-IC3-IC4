@@ -34,10 +34,10 @@ import { NotificationsProvider } from "@/contexts/NotificationsContext";
 const queryClient = new QueryClient();
 
 const ProtectedPage = ({ path, element }: { path: string; element: JSX.Element }) => {
-  const { usuario } = useAuth();
-  const rangoNum = Number(usuario?.rango || 1);
+  const { usuario, isAdmin } = useAuth();
+  const rangoNum = Number(usuario?.rango || (isAdmin ? 8 : 1));
 
-  if (rangoNum === 8) return element;
+  if (rangoNum === 8 || isAdmin) return element;
   if (rangoNum === 7 || rangoNum === 6) {
     if (['/plantas', '/secciones', '/sensores', '/almacenamiento', '/credenciales', '/comunicacion'].includes(path)) {
       return <Navigate to="/dashboard" replace />;
