@@ -1,44 +1,42 @@
 import os
 import subprocess
 import json
+import logging
 from django.utils import timezone
 from django.shortcuts import render, redirect
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
+from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
+from django.middleware.csrf import get_token
+from django.contrib.auth.models import User
+from allauth.account.models import EmailConfirmation, EmailAddress
 
 # --- Importaciones de Django REST Framework ---
+from rest_framework import status, viewsets, permissions, generics
 from rest_framework.decorators import api_view, permission_classes, action
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework.pagination import PageNumberPagination
 
-# --- Importaciones de Modelos y Serializers ---
-# ACÁ AGREGAMOS ORDENPRODUCCION
-from .models import Fabrica, OrdenProduccion, Receta, HistorialProduccion, DispositivoSCADA, LecturaSensor
-from .serializers import (
-    FabricaSerializer,
-    OrdenProduccionSerializer, 
-    OrdenProduccionListSerializer,
-    RecetaSerializer,
-    DispositivoSCADASerializer,
-    LecturaSensorSerializer,
-) 
-from rest_framework import viewsets, permissions
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
-from .permissions import CanManageEmployees, IsAdminUserOrReadOnly, CanAccessSystemConfig
-from .models import ConfiguracionMQTT
-from .serializers import ConfiguracionMQTTSerializer
-from .models import TopicMQTT
-from .serializers import TopicMQTTSerializer
+# --- Importaciones Locales (Modelos, Serializers y Permisos) ---
 from . import models
 from . import serializers
-from .serializers import (
-    SeccionSerializer,
-    EmpleadoSerializer,
-    InventarioSerializer,
-    ItemInventarioSerializer,
-    HistorialMovimientosSerializer,
-    CronogramaSeccionSerializer,
+from .models import (
+    Fabrica, OrdenProduccion, Receta, HistorialProduccion, DispositivoSCADA, LecturaSensor,
+    ConfiguracionMQTT, TopicMQTT, Seccion, Empleado, Inventario, ItemInventario, HistorialMovimientos,
+    CronogramaSeccion, Produccion, RegistroMantenimiento, Sistema, PlantillaProduccion,
+    IngredienteAlmacenamiento, MantenimientoProgramado, UnidadAlmacenamiento, ComunicacionMQTT
 )
+from .serializers import (
+    FabricaSerializer, OrdenProduccionSerializer, OrdenProduccionListSerializer, RecetaSerializer,
+    DispositivoSCADASerializer, LecturaSensorSerializer, ConfiguracionMQTTSerializer, TopicMQTTSerializer,
+    SeccionSerializer, EmpleadoSerializer, InventarioSerializer, ItemInventarioSerializer,
+    HistorialMovimientosSerializer, CronogramaSeccionSerializer, ProduccionSerializer,
+    RegistroMantenimientoSerializer, SistemaSerializer, PlantillaProduccionSerializer,
+    IngredienteAlmacenamientoSerializer, MantenimientoProgramadoSerializer, UnidadAlmacenamientoSerializer,
+    HistorialProduccionSerializerBasic, ComunicacionMQTTSerializer, UserSerializer, ProfileSerializer
+)
+from .permissions import CanManageEmployees, IsAdminUserOrReadOnly, CanAccessSystemConfig
+
 
 
 def _clean_topic_segment(val):
@@ -98,27 +96,7 @@ def _publish_mqtt_single(topic, payload, client_id_prefix="django-backend"):
 
 
 
-from .serializers import (
-    ProduccionSerializer,
-    RegistroMantenimientoSerializer,
-    SistemaSerializer,
-    PlantillaProduccionSerializer,
-    IngredienteAlmacenamientoSerializer,
-    MantenimientoProgramadoSerializer,
-    UnidadAlmacenamientoSerializer,
-    HistorialProduccionSerializerBasic,
-    ComunicacionMQTTSerializer,
-)
-from django.contrib.auth.models import User
-from rest_framework import generics
-from .serializers import UserSerializer, ProfileSerializer
-from django.http import JsonResponse
-from django.views.decorators.csrf import ensure_csrf_cookie
-from django.middleware.csrf import get_token
-from django.views.decorators.csrf import csrf_exempt
-import logging
-from allauth.account.models import EmailConfirmation, EmailAddress
-from django.utils import timezone
+
 
 
 @api_view(['GET'])
@@ -196,7 +174,7 @@ class ConfiguracionMQTTViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
 
-from rest_framework.permissions import IsAdminUser, IsAuthenticated, IsAuthenticatedOrReadOnly
+
 
 class DispositivoSCADAViewSet(viewsets.ModelViewSet):
     """CRUD para dispositivos SCADA"""
@@ -692,7 +670,7 @@ class RegistroMantenimientoViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
 
-from rest_framework.pagination import PageNumberPagination
+
 
 class AuditoriaPageNumberPagination(PageNumberPagination):
     page_size = 25
@@ -894,9 +872,18 @@ class UnidadAlmacenamientoViewSet(viewsets.ModelViewSet):
     serializer_class = UnidadAlmacenamientoSerializer
     permission_classes = [AllowAny]
 
+    def perform_create(self, serializer):
+        inv = serializer.validated_data.get('inventario') or models.Inventario.objects.first()
+        serializer.save(inventario=inv)
+
+    def perform_update(self, serializer):
+        inv = serializer.validated_data.get('inventario') or serializer.instance.inventario or models.Inventario.objects.first()
+        serializer.save(inventario=inv)
+
     def perform_destroy(self, instance):
         models.IngredienteAlmacenamiento.objects.filter(unidad_almacenamiento=instance).update(unidad_almacenamiento=None)
         instance.delete()
+
 
 
 class HistorialProduccionViewSet(viewsets.ModelViewSet):

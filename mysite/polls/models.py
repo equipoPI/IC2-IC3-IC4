@@ -138,12 +138,18 @@ class Empleado(models.Model):
                 self.user.is_active = is_active
                 self.user.save()
 
-    def calcular_antiguedad(self):
+    @property
+    def antiguedad(self):
+        if not self.fecha_contratacion:
+            return 0
         hoy = now().date()
-        self.antiguedad = hoy.year - self.fecha_contratacion.year
+        ant = hoy.year - self.fecha_contratacion.year
         if (hoy.month, hoy.day) < (self.fecha_contratacion.month, self.fecha_contratacion.day):
-            self.antiguedad -= 1
-        self.save()
+            ant -= 1
+        return max(0, ant)
+
+    def calcular_antiguedad(self):
+        return self.antiguedad
 
     def __str__(self):
         uname = self.user.username if self.user else ''
@@ -966,6 +972,7 @@ class MapeoAccionMQTT(models.Model):
         ('BOTON', 'Botón de Acción MQTT'),
         ('SLIDER', 'Barra Deslizante (Slider)'),
         ('NUMERICO', 'Campo Numérico (Input)'),
+        ('PARAMETRIZADO', 'Control Parametrizado (Campos Dinámicos)'),
         ('RECETA', 'Panel de Receta (Manual / Plantilla)'),
     ]
 
