@@ -459,11 +459,17 @@ class SCADAGateway:
             if getattr(self, 'processing_paused', False):
                 logger.info("Gateway en pausa: ignorando comando de mezcla recibido por MQTT")
                 return
+            
+            logger.info("=" * 60)
+            logger.info("⚙️  PROCESANDO COMANDO MEZCLA")
+            logger.info("=" * 60)
+            
             # Comandos de mezcla
             liquido_1 = data.get('liquido_1')
             liquido_2 = data.get('liquido_2')
             hora = data.get('hora')
             minuto = data.get('minuto')
+            logger.debug(f"Parámetros recibidos: L1={liquido_1}, L2={liquido_2}, H={hora}, M={minuto}")
             
             # Enviar configuración de líquidos
             if liquido_1 is not None:
@@ -803,7 +809,28 @@ def signal_handler(signum, frame):
     
     if gateway:
         try:
+            # Detener el gateway
             gateway.stop()
+            gateway.running = False  # Asegurar que el loop principal termine
+            
+            # Si hay una GUI thread activa, intentar cerrarla
+            if gateway._gui_thread and gateway._gui_thread.is_alive():
+                logger.info("Intentando cerrar GUI thread...")
+                try:
+                    import tkinter as tk
+                    # Buscar la ventana raíz de Tkinter si existe
+                    try:
+                        root = tk.Tk()
+                        root.quit()
+                        root.destroy()
+                    except:
+                        pass
+                except:
+                    pass
+                
+                # Esperar un poco a que se cierre
+                import time
+                time.sleep(1)
         except Exception as e:
             logger.error(f"Error en stop(): {e}")
     
@@ -848,9 +875,15 @@ def main():
                     gateway.print_status()
             
             # Si hay thread GUI, esperar a que termine (cuando usuario cierra ventana)
+            # IMPORTANTE: Con timeout para no quedar stuck si Tkinter no responde
             if gateway._gui_thread and gateway._gui_thread.is_alive():
-                logger.info("Esperando a que se cierre la GUI...")
+                logger.info("Esperando a que se cierre la GUI (timeout=5s)...")
                 gateway._gui_thread.join(timeout=5)
+                
+                # Si sigue vivo después del timeout, forzar salida
+                if gateway._gui_thread.is_alive():
+                    logger.warning("GUI thread no respondió en tiempo, forzando salida...")
+                    sys.exit(0)
         
         else:
             logger.error("No se pudo iniciar el gateway")
@@ -862,7 +895,8 @@ def main():
         if gateway:
             try:
                 gateway.stop()
-                # Esperar al thread GUI si existe
+                gateway.running = False
+                # Esperar al thread GUI si existe (timeout corto)
                 if gateway._gui_thread and gateway._gui_thread.is_alive():
                     gateway._gui_thread.join(timeout=2)
             except Exception as e:
