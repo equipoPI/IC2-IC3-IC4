@@ -1,4 +1,4 @@
-import { BookOpen, Server, Cpu, Database, Send, Radio, Terminal, ArrowRight, ShieldAlert, CheckCircle2, Layers, Trash2, Zap, Play, Settings, RefreshCw } from "lucide-react";
+import { BookOpen, Server, Cpu, Database, Send, Radio, Terminal, ArrowRight, ShieldAlert, CheckCircle2, Layers, Trash2, Zap, Play, Settings, RefreshCw, SlidersHorizontal, FlaskConical, Box, PackageCheck, Droplet, Thermometer } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -14,7 +14,7 @@ const GuiaSistema = () => {
           Guía Integral del Sistema SCADA
         </h1>
         <p className="text-muted-foreground mt-2 text-lg">
-          Documentación técnica y operativa de la arquitectura IoT, comunicación MQTT, gestión de procesos y módulos del sistema.
+          Documentación técnica y operativa de la arquitectura IoT, WebSockets en tiempo real, motor de comandos dinámicos y módulos del sistema.
         </p>
       </div>
 
@@ -43,24 +43,23 @@ const GuiaSistema = () => {
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab 1: Flujo General (Linear Single-Row Layout) */}
+        {/* Tab 1: Flujo General (Arquitectura y WebSockets) */}
         <TabsContent value="flujo-general" className="space-y-6 mt-4">
           <Card className="bg-card border-border overflow-hidden">
             <CardHeader className="border-b border-border/50 bg-muted/20">
-              <CardTitle className="text-xl">Arquitectura de Comunicación & Rendimiento</CardTitle>
+              <CardTitle className="text-xl">Arquitectura en Tiempo Real (WebSockets + MQTT)</CardTitle>
               <CardDescription>
-                Flujo lineal extremo a extremo desde el dispositivo físico hasta la interfaz reactiva web.
+                Flujo continuo extremo a extremo desde el dispositivo físico hasta la interfaz reactiva web con latencia inferior a 20ms.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6 space-y-8">
-              {/* Diagrama Interactivo en Una Sola Línea */}
+              {/* Diagrama de 6 Pasos */}
               <div className="bg-background/80 rounded-xl p-6 border border-border/80 shadow-inner overflow-x-auto">
                 <h3 className="text-center text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-8">
-                  Camino de la Información en Tiempo Real (Una Sola Línea Continua)
+                  Camino de la Información en Tiempo Real (Push Bidireccional &lt;20ms)
                 </h3>
                 
-                {/* Single Continuous Row Container */}
-                <div className="flex flex-col lg:flex-row items-center justify-between gap-2 min-w-[850px]">
+                <div className="flex flex-col lg:flex-row items-center justify-between gap-1.5 min-w-[950px]">
                   {/* Step 1 */}
                   <div className="flex-1 flex flex-col items-center text-center p-3 bg-card rounded-lg border border-primary/20 shadow-md hover:border-primary/50 transition-colors">
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mb-1.5">
@@ -68,49 +67,49 @@ const GuiaSistema = () => {
                     </div>
                     <span className="text-[10px] font-semibold text-muted-foreground uppercase">1. Sensores / PLC</span>
                     <h4 className="text-xs font-bold text-foreground mt-0.5">Raspberry / GW</h4>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">Genera telemetría cada 1s</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Telemetría cada 1s</p>
                   </div>
 
                   {/* Arrow 1 */}
                   <div className="flex flex-col items-center justify-center text-muted-foreground px-1 shrink-0">
-                    <span className="text-[9px] font-mono text-primary animate-pulse">MQTT 1883</span>
-                    <ArrowRight className="h-5 w-5 text-primary/70" />
+                    <span className="text-[9px] font-mono text-primary">MQTT 1883</span>
+                    <ArrowRight className="h-4 w-4 text-primary/70" />
                   </div>
 
                   {/* Step 2 */}
-                  <div className="flex-1 flex flex-col items-center text-center p-3 bg-card rounded-lg border border-border shadow-md hover:border-primary/30 transition-colors">
+                  <div className="flex-1 flex flex-col items-center text-center p-3 bg-card rounded-lg border border-border shadow-md hover:border-emerald-500/40 transition-colors">
                     <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center mb-1.5">
                       <Radio className="h-5 w-5 text-emerald-500" />
                     </div>
                     <span className="text-[10px] font-semibold text-muted-foreground uppercase">2. Broker MQTT</span>
-                    <h4 className="text-xs font-bold text-foreground mt-0.5">Mosquitto Broker</h4>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">Autenticación por clave</p>
+                    <h4 className="text-xs font-bold text-foreground mt-0.5">Mosquitto</h4>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Auth segura por passwd</p>
                   </div>
 
                   {/* Arrow 2 */}
                   <div className="flex flex-col items-center justify-center text-muted-foreground px-1 shrink-0">
-                    <span className="text-[9px] font-mono text-emerald-500">Subscripción #</span>
-                    <ArrowRight className="h-5 w-5 text-emerald-500/70" />
+                    <span className="text-[9px] font-mono text-emerald-500">Sub #</span>
+                    <ArrowRight className="h-4 w-4 text-emerald-500/70" />
                   </div>
 
                   {/* Step 3 */}
-                  <div className="flex-1 flex flex-col items-center text-center p-3 bg-card rounded-lg border border-border shadow-md hover:border-primary/30 transition-colors">
+                  <div className="flex-1 flex flex-col items-center text-center p-3 bg-card rounded-lg border border-border shadow-md hover:border-amber-500/40 transition-colors">
                     <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center mb-1.5">
                       <Server className="h-5 w-5 text-amber-500" />
                     </div>
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase">3. Django Worker</span>
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase">3. Ingesta Django</span>
                     <h4 className="text-xs font-bold text-foreground mt-0.5">mqtt_worker.py</h4>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">Ingesta & Auto-Discovery</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Auto-Discovery & Parse</p>
                   </div>
 
                   {/* Arrow 3 */}
                   <div className="flex flex-col items-center justify-center text-muted-foreground px-1 shrink-0">
-                    <span className="text-[9px] font-mono text-amber-500">ORM Django</span>
-                    <ArrowRight className="h-5 w-5 text-amber-500/70" />
+                    <span className="text-[9px] font-mono text-amber-500">ORM / Push</span>
+                    <ArrowRight className="h-4 w-4 text-amber-500/70" />
                   </div>
 
                   {/* Step 4 */}
-                  <div className="flex-1 flex flex-col items-center text-center p-3 bg-card rounded-lg border border-border shadow-md hover:border-primary/30 transition-colors">
+                  <div className="flex-1 flex flex-col items-center text-center p-3 bg-card rounded-lg border border-border shadow-md hover:border-cyan-500/40 transition-colors">
                     <div className="w-10 h-10 rounded-full bg-cyan-500/10 flex items-center justify-center mb-1.5">
                       <Database className="h-5 w-5 text-cyan-500" />
                     </div>
@@ -121,40 +120,56 @@ const GuiaSistema = () => {
 
                   {/* Arrow 4 */}
                   <div className="flex flex-col items-center justify-center text-muted-foreground px-1 shrink-0">
-                    <span className="text-[9px] font-mono text-cyan-500">API &lt;100ms</span>
-                    <ArrowRight className="h-5 w-5 text-cyan-500/70" />
+                    <span className="text-[9px] font-mono text-cyan-400">Channels</span>
+                    <ArrowRight className="h-4 w-4 text-cyan-400/70" />
                   </div>
 
                   {/* Step 5 */}
+                  <div className="flex-1 flex flex-col items-center text-center p-3 bg-card rounded-lg border border-border shadow-md hover:border-purple-500/40 transition-colors">
+                    <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center mb-1.5">
+                      <Zap className="h-5 w-5 text-purple-400" />
+                    </div>
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase">5. Servidor WS</span>
+                    <h4 className="text-xs font-bold text-foreground mt-0.5">Daphne (ASGI)</h4>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">/ws/scada/ Broadcast</p>
+                  </div>
+
+                  {/* Arrow 5 */}
+                  <div className="flex flex-col items-center justify-center text-muted-foreground px-1 shrink-0">
+                    <span className="text-[9px] font-mono text-purple-400">&lt;20ms</span>
+                    <ArrowRight className="h-4 w-4 text-purple-400/70" />
+                  </div>
+
+                  {/* Step 6 */}
                   <div className="flex-1 flex flex-col items-center text-center p-3 bg-card rounded-lg border border-primary/20 shadow-md hover:border-primary/50 transition-colors">
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mb-1.5">
                       <BookOpen className="h-5 w-5 text-primary" />
                     </div>
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase">5. Frontend React</span>
-                    <h4 className="text-xs font-bold text-foreground mt-0.5">Panel Web SCADA</h4>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">Refresco dinámico en vivo</p>
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase">6. React SCADA</span>
+                    <h4 className="text-xs font-bold text-foreground mt-0.5">useScadaWebSocket</h4>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Render en tiempo real</p>
                   </div>
                 </div>
               </div>
 
-              {/* Explicación textual */}
+              {/* Explicación técnica */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                 <div className="space-y-3">
                   <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
                     <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                    ¿Cómo funciona el flujo de datos?
+                    Comunicación Push sin Polling
                   </h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    Los dispositivos físicos (Raspberry Pi Gateway) o simuladores publican telemetría en Mosquitto MQTT. El <strong>Worker MQTT</strong> de Django ingiere los tópicos, discrimina entre sensores de hardware y variables de proceso, registrando automáticamente lecturas en PostgreSQL. La API REST optimizada entrega respuestas instantáneas a la web.
+                    La integración de <strong>Django Channels</strong> y el servidor ASGI <strong>Daphne</strong> permite que el worker MQTT y las señales de base de datos emitan eventos instantáneos por WebSockets. El hook de React <code>useScadaWebSocket</code> actualiza la interfaz sin necesidad de peticiones HTTP repetitivas.
                   </p>
                 </div>
                 <div className="space-y-3">
                   <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
                     <Zap className="h-5 w-5 text-amber-500" />
-                    Optimización de Rendimiento
+                    Optimización y Consultas Atómicas
                   </h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    Se erradicó el problema N+1 en las consultas de base de datos aplicando <code className="text-primary font-mono font-bold">select_related</code> en los ViewSets de Django REST Framework, bajando los tiempos de respuesta de minutos a <strong>menos de 100ms</strong> en todas las vistas del sistema.
+                    Se aplicó <code className="text-primary font-mono font-bold">select_related</code> y <code className="text-primary font-mono font-bold">prefetch_related</code> en todos los endpoints REST, asegurando respuestas en menos de <strong>100ms</strong> y eliminando el problema N+1 en lecturas masivas.
                   </p>
                 </div>
               </div>
@@ -166,65 +181,60 @@ const GuiaSistema = () => {
         <TabsContent value="modulos" className="space-y-6 mt-4">
           <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle>Módulos Operativos de la Plataforma</CardTitle>
+              <CardTitle>Módulos y Funcionalidades del Sistema</CardTitle>
               <CardDescription>
-                Resumen funcional de cada sección disponible en el menú lateral.
+                Resumen de cada sección operativa disponible en la plataforma SCADA.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="border border-border p-4 rounded-lg bg-card space-y-2">
-                <Badge className="bg-primary/20 text-primary hover:bg-primary/20 border-primary/30">SCADA Interactivo (/scada)</Badge>
-                <h4 className="text-sm font-bold text-foreground">Diagrama de Flujo P&ID (12 Componentes)</h4>
+                <div className="flex items-center justify-between">
+                  <Badge className="bg-primary/20 text-primary border-primary/30">SCADA Interactivo (/scada)</Badge>
+                  <Badge variant="outline" className="text-[10px] border-cyan-800 text-cyan-300">P&ID + Dinámico</Badge>
+                </div>
+                <h4 className="text-sm font-bold text-foreground">Visualización y Paneles Parametrizados</h4>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Diagrama animado fiel a la topología física real con 12 componentes industriales (Bombas, Mezclador, Válvulas, Tanques y Sensores de Flujo) en tiempo real. Permite emitir comandos industriales directamente a cada equipo o línea.
+                  Diagrama de flujo animado de 12 componentes con telemetría en vivo, insignias de tipo de proceso (Fluidos, Sólidos, Empaque, Temperatura) y motor de paneles dinámicos personalizables para reposición, recetas con horas/minutos y controles manuales.
                 </p>
               </div>
 
               <div className="border border-border p-4 rounded-lg bg-card space-y-2">
-                <Badge className="bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/20 border-emerald-500/30">Planificación (/planificacion)</Badge>
-                <h4 className="text-sm font-bold text-foreground">Gestión de Órdenes de Producción</h4>
+                <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/30">Planificación (/planificacion)</Badge>
+                <h4 className="text-sm font-bold text-foreground">Gestión de Órdenes y Recetas</h4>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Paginación eficiente (10 por página), Calendario Mensual, Diagrama de Gantt y ejecución/pausa/cancelación de órdenes persistidas exclusivamente en PostgreSQL sin datos falsos estáticos.
+                  Planificación industrial con diagrama de Gantt, calendario mensual, ejecución automática de recetas y sincronización de progreso en tiempo real.
                 </p>
               </div>
 
               <div className="border border-border p-4 rounded-lg bg-card space-y-2">
-                <Badge className="bg-cyan-500/20 text-cyan-500 hover:bg-cyan-500/20 border-cyan-500/30">Sensores (/sensores)</Badge>
-                <h4 className="text-sm font-bold text-foreground">Dispositivos y Máquinas</h4>
+                <Badge className="bg-cyan-500/20 text-cyan-500 border-cyan-500/30">Sensores y Dispositivos (/sensores)</Badge>
+                <h4 className="text-sm font-bold text-foreground">Inventario y Telemetría IoT</h4>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Administración del inventario de sensores de hardware. Eliminación segura y atómica con confirmación inmediata y actualización del conteo real (12 dispositivos de planta).
+                  Monitoreo del parque de 12 sensores industriales (Bombas, Caudalímetros, Mezclador, Válvulas y Nivel), registro de lecturas y auto-descubrimiento.
                 </p>
               </div>
 
               <div className="border border-border p-4 rounded-lg bg-card space-y-2">
-                <Badge className="bg-amber-500/20 text-amber-500 hover:bg-amber-500/20 border-amber-500/30">Almacenamiento (/almacenamiento)</Badge>
-                <h4 className="text-sm font-bold text-foreground">Unidades de Almacenamiento</h4>
+                <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30">Almacenamiento (/almacenamiento)</Badge>
+                <h4 className="text-sm font-bold text-foreground">Tanques y Bombos de Materia Prima</h4>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Monitoreo de tanques, materias primas y niveles porcentaje en bombos. Integrado con los controles de reposición de materia prima.
+                  Monitoreo de tanques de reserva, niveles de llenado en porcentaje y disparo de reposición con control de límite de carga.
                 </p>
               </div>
 
               <div className="border border-border p-4 rounded-lg bg-card space-y-2">
-                <Badge className="bg-purple-500/20 text-purple-500 hover:bg-purple-500/20 border-purple-500/30">Monitorización (/monitorizacion)</Badge>
-                <h4 className="text-sm font-bold text-foreground">Tendencias e Históricos Recharts</h4>
+                <Badge className="bg-purple-500/20 text-purple-500 border-purple-500/30">Monitorización (/monitorizacion)</Badge>
+                <h4 className="text-sm font-bold text-foreground">Históricos y Alarmas Operativas</h4>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Gráficos de telemetría filtrados dinámicamente por Planta, Sección, Sistema o Sensor específico, panel macro de salud y registro de alarmas operativas.
+                  Gráficos de series temporales con Recharts, panel de salud de planta y gestión de alarmas por severidad (Alta, Media, Baja).
                 </p>
               </div>
 
               <div className="border border-border p-4 rounded-lg bg-card space-y-2">
-                <Badge className="bg-rose-500/20 text-rose-500 hover:bg-rose-500/20 border-rose-500/30">Empleados (/empleados)</Badge>
-                <h4 className="text-sm font-bold text-foreground">Personal y Control de Acceso</h4>
+                <Badge className="bg-rose-500/20 text-rose-500 border-rose-500/30">Credenciales y Permisos (/credenciales)</Badge>
+                <h4 className="text-sm font-bold text-foreground">Usuarios, Mosquitto y Roles</h4>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Normalización atómica por DNI, asignación de planta/rango y control de acceso laboral (Activo, Suspendido, Despedido, Jubilado).
-                </p>
-              </div>
-
-              <div className="border border-border p-4 rounded-lg bg-card space-y-2">
-                <Badge className="bg-primary/20 text-primary hover:bg-primary/20 border-primary/30">Credenciales y Permisos (/credenciales)</Badge>
-                <h4 className="text-sm font-bold text-foreground">Gestión de Accesos, Broker Mosquitto y Rangos</h4>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Panel unificado para claves de registro de usuarios, credenciales de Mosquitto (`passwd`) con recarga en caliente y resumen de la Matriz de Permisos por Rango (1 a 8).
+                  Gestión de claves de alta, usuarios autorizados en el archivo <code>passwd</code> del broker Mosquitto y matriz de permisos por rangos (1 a 8).
                 </p>
               </div>
             </CardContent>
@@ -235,38 +245,69 @@ const GuiaSistema = () => {
         <TabsContent value="telemetria" className="space-y-6 mt-4">
           <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle>Ingesta de Datos, Auto-Discovery & Daemon `mqtt_worker.py`</CardTitle>
+              <CardTitle>Ingesta de Datos, Tópicos MQTT y Auto-Discovery</CardTitle>
               <CardDescription>
-                Esquema estructurado de tópicos MQTT y lógica interna del Worker de Django.
+                Esquema estructurado de tópicos MQTT y funcionamiento del worker en segundo plano.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Estructura del Tópico */}
               <div className="space-y-4">
-                <h3 className="text-md font-bold text-foreground">Estructura del Tópico de Telemetría (Ingesta)</h3>
-                <div className="bg-muted p-4 rounded-lg font-mono text-xs border border-border flex items-center justify-between overflow-x-auto">
+                <h3 className="text-md font-bold text-foreground">Estructura Estándar de Telemetría (Ingesta)</h3>
+                <div className="bg-muted p-4 rounded-lg font-mono text-xs border border-border flex items-center justify-between overflow-x-auto gap-2">
                   <span className="text-primary font-bold">tenant</span>
                   <span className="text-muted-foreground">/</span>
-                  <span className="text-emerald-500 font-bold">gateway_id</span>
+                  <span className="text-emerald-400 font-bold">gateway_id</span>
                   <span className="text-muted-foreground">/</span>
-                  <span className="text-amber-500 font-bold">seccion</span>
+                  <span className="text-amber-400 font-bold">seccion</span>
                   <span className="text-muted-foreground">/</span>
-                  <span className="text-cyan-500 font-bold">sistema</span>
+                  <span className="text-cyan-400 font-bold">sistema</span>
                   <span className="text-muted-foreground">/</span>
                   <span className="text-purple-400 font-bold">categoria</span>
                   <span className="text-muted-foreground">/</span>
-                  <span className="text-rose-500 font-bold">dispositivo_o_variable</span>
+                  <span className="text-rose-400 font-bold">dispositivo</span>
                 </div>
 
-                <h3 className="text-md font-bold text-foreground pt-2">Estructuras de Tópicos de Comandos Estándar</h3>
+                <h3 className="text-md font-bold text-foreground pt-2">Estructuras de Tópicos de Comandos</h3>
                 <div className="grid grid-cols-1 gap-2 text-xs font-mono">
                   <div className="p-2.5 bg-card border border-emerald-500/30 rounded flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                    <span className="text-emerald-400 font-bold">1. Jerárquico Directo por Acción (Recomendado):</span>
-                    <code className="text-foreground font-mono bg-muted px-2 py-1 rounded">tenant/gateway_id/seccion/sistema/reposicion (o /mezcla)</code>
+                    <span className="text-emerald-400 font-bold">1. Comando Jerárquico por Acción:</span>
+                    <code className="text-foreground font-mono bg-muted px-2 py-1 rounded">tenant/gateway_id/seccion/sistema/accion</code>
                   </div>
                   <div className="p-2.5 bg-card border border-cyan-500/30 rounded flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                    <span className="text-cyan-400 font-bold">2. Jerárquico General + Payload JSON:</span>
-                    <code className="text-foreground font-mono bg-muted px-2 py-1 rounded">tenant/gateway_id/seccion/sistema/accion</code>
+                    <span className="text-cyan-400 font-bold">2. Ejemplos Reales:</span>
+                    <code className="text-foreground font-mono bg-muted px-2 py-1 rounded">rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/reposicion</code>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tipos de Proceso SCADA */}
+              <div className="space-y-3 pt-2">
+                <h3 className="text-md font-bold text-foreground">Clasificación de Sistemas Industriales</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="p-3 bg-slate-900 border border-cyan-800/80 rounded-lg space-y-1">
+                    <div className="flex items-center gap-2 text-cyan-300 font-bold text-xs">
+                      <Droplet className="h-4 w-4" /> FLUIDOS / LÍQUIDOS
+                    </div>
+                    <p className="text-[11px] text-slate-400">Bombas, mezcladores, tanques y caudalímetros.</p>
+                  </div>
+                  <div className="p-3 bg-slate-900 border border-amber-800/80 rounded-lg space-y-1">
+                    <div className="flex items-center gap-2 text-amber-300 font-bold text-xs">
+                      <Layers className="h-4 w-4" /> SÓLIDOS
+                    </div>
+                    <p className="text-[11px] text-slate-400">Tolvas, silos, cintas y dosificación de polvos.</p>
+                  </div>
+                  <div className="p-3 bg-slate-900 border border-purple-800/80 rounded-lg space-y-1">
+                    <div className="flex items-center gap-2 text-purple-300 font-bold text-xs">
+                      <PackageCheck className="h-4 w-4" /> EMPAQUE
+                    </div>
+                    <p className="text-[11px] text-slate-400">Envasadoras, selladoras, paletizado y etiquetado.</p>
+                  </div>
+                  <div className="p-3 bg-slate-900 border border-rose-800/80 rounded-lg space-y-1">
+                    <div className="flex items-center gap-2 text-rose-300 font-bold text-xs">
+                      <Thermometer className="h-4 w-4" /> TEMPERATURA
+                    </div>
+                    <p className="text-[11px] text-slate-400">Hornos, autoclaves, calderas y cámaras de frío.</p>
                   </div>
                 </div>
               </div>
@@ -275,107 +316,76 @@ const GuiaSistema = () => {
               <div className="p-4 bg-muted/20 border border-border rounded-lg space-y-3">
                 <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
                   <Server className="h-4 w-4 text-amber-500" />
-                  ¿Qué hace el Daemon `mqtt_worker.py`?
+                  Lógica del Daemon `mqtt_worker.py`
                 </h4>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Es el servicio neurálgico en segundo plano que se conecta permanentemente al broker Mosquitto. Realiza las siguientes tareas clave:
-                </p>
                 <ul className="list-disc list-inside text-xs text-muted-foreground space-y-1">
-                  <li><strong>Ingesta Unificada</strong>: Captura lecturas de sensores y actualiza `ultima_lectura` y estado `ONLINE`.</li>
-                  <li><strong>Auto-Discovery</strong>: Si detecta un sensor no registrado previamente, crea automáticamente la fila en PostgreSQL.</li>
-                  <li><strong>Aislamiento de Variables de Proceso</strong>: Tópicos como `/proceso/mezclado` o `/proceso/tiempo_restante` actualizan el avance de la orden activa en `/planificacion` y `/control` sin crear hardware ficticio.</li>
-                  <li><strong>Gestión de Alarmas y Diagnóstico</strong>: Captura anomalías y publica actualizaciones de salud global de la fábrica.</li>
+                  <li><strong>Ingesta Unificada</strong>: Captura lecturas de sensores y actualiza <code>ultima_lectura</code> y estado <code>ONLINE</code>.</li>
+                  <li><strong>Auto-Discovery</strong>: Crea automáticamente en PostgreSQL sensores detectados por primera vez.</li>
+                  <li><strong>Difusión WebSocket</strong>: Emite eventos en el grupo <code>scada_telemetry</code> para reflejo instantáneo en la web.</li>
                 </ul>
-              </div>
-
-              {/* Indicador de Red en Sidebar */}
-              <div className="p-4 bg-card border border-border rounded-lg space-y-2">
-                <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/30">Panel Red SCADA / MQTT</Badge>
-                <h4 className="text-sm font-bold text-foreground mt-1">Conteo y Estado Online Real</h4>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  El indicador inferior de la barra lateral procesa el estado case-insensitive de los dispositivos (`ONLINE`, `ACTIVO`, `OPERATIVO`) y su última lectura tolerando la zona horaria de Argentina (GMT-3), marcando la red en <strong>ACTIVO</strong> y reflejando el conteo exacto de <strong>12 / 12 dispositivos</strong>.
-                </p>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Tab 4: Acciones MQTT & Modos de Control */}
+        {/* Tab 4: Acciones MQTT & Motor de Parámetros */}
         <TabsContent value="comandos" className="space-y-6 mt-4">
           <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle>Operación de Tópicos: Modo Manual (`/scada`) vs Modo Automático (`/planificacion`)</CardTitle>
+              <CardTitle>Motor de Controles Parametrizados y Personalizador de Comandos</CardTitle>
               <CardDescription>
-                Cómo se registran los tópicos en `/comunicacion` y cómo se envían comandos a los actuadores físicos.
+                Creación y ajuste dinámico de botones, sliders, recetas y selectores de bombo sin modificar código fuente.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Explicación de Registro, Modo Manual y Modo Auto */}
+              {/* Características del Motor Dinámico */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="border border-border p-4 rounded-lg bg-card space-y-2">
-                  <div className="flex items-center gap-2 text-primary font-bold text-sm">
-                    <Settings className="h-4 w-4" />
-                    1. Alta en /comunicacion
+                  <div className="flex items-center gap-2 text-cyan-400 font-bold text-sm">
+                    <Box className="h-4 w-4" />
+                    1. Selectores de Bombo (1, 2, 3, 4)
                   </div>
-                  <h5 className="text-xs font-semibold text-foreground">Registro de Parámetros MQTT</h5>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    En <strong>Configuración MQTT</strong> se ingresan las credenciales, Host, Puerto, Tenant predeterminado y el mapa de acciones (`MapeoAccionMQTT`) vinculando comandos como `INICIAR`, `PAUSAR`, `PARAR`, `VACIAR`, `abrir`.
+                    Permite configurar la cantidad exacta de bombos a mostrar (ej. 2 bombos: botones <code>1</code> y <code>2</code>; 4 bombos: <code>1, 2, 3, 4</code>) persistiendo la elección en el modelo <code>MapeoAccionMQTT</code>.
                   </p>
                 </div>
 
                 <div className="border border-border p-4 rounded-lg bg-card space-y-2">
-                  <div className="flex items-center gap-2 text-emerald-500 font-bold text-sm">
-                    <Play className="h-4 w-4" />
-                    2. Modo Manual (/scada & /control)
+                  <div className="flex items-center gap-2 text-purple-400 font-bold text-sm">
+                    <FlaskConical className="h-4 w-4" />
+                    2. Recetas en Horas y Minutos
                   </div>
-                  <h5 className="text-xs font-semibold text-foreground">Acciones por Botón de Interfaz</h5>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    Al pulsar un botón en `/scada` o `/control`, el frontend efectúa un `POST` a Django. Django compone el tópico <code className="text-emerald-500 font-mono">tenant/gateway_id/seccion/sistema/accion</code> y publica el payload MQTT directo al actuador.
+                    Soporte para campos independientes de <strong>Horas (0-24 h)</strong> y <strong>Minutos (0-59 min)</strong> con sincronización automática de recetas precargadas en base de datos.
                   </p>
                 </div>
 
                 <div className="border border-border p-4 rounded-lg bg-card space-y-2">
-                  <div className="flex items-center gap-2 text-amber-500 font-bold text-sm">
-                    <RefreshCw className="h-4 w-4" />
-                    3. Modo Automático (/planificacion)
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                    <SlidersHorizontal className="h-4 w-4" />
+                    3. Placeholders Dinámicos
                   </div>
-                  <h5 className="text-xs font-semibold text-foreground">Carga & Ejecución de Recetas</h5>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    Al ejecutar una Orden de Producción en `/planificacion`, Django publica las secuencias de recetas y escucha `/proceso/` para actualizar el avance (`progreso_porcentaje`) automáticamente en tiempo real.
+                    Cualquier variable entre llaves como <code>{`{ingrediente_a}`}</code> o <code>{`{limite_porcentaje}`}</code> genera automáticamente sliders e inputs numéricos con transmisión segura vía MQTT.
                   </p>
                 </div>
               </div>
 
-              {/* Diagrama de escritura */}
-              <div className="bg-background/80 rounded-xl p-6 border border-border shadow-inner">
-                <h3 className="text-center text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-8">
-                  Camino de un Comando Industrial desde la Interfaz Web
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-7 gap-2 items-center text-center">
-                  <div className="p-3 bg-card rounded-lg border border-primary/20 shadow-md">
-                    <BookOpen className="h-5 w-5 mx-auto text-primary mb-1" />
-                    <h5 className="text-xs font-bold text-foreground">1. Clic en Web</h5>
-                    <p className="text-[9px] text-muted-foreground mt-0.5">Operador acciona botón</p>
-                  </div>
-                  <div className="text-muted-foreground text-xs font-mono">POST API</div>
-                  <div className="p-3 bg-card rounded-lg border border-border shadow-md">
-                    <Server className="h-5 w-5 mx-auto text-foreground mb-1" />
-                    <h5 className="text-xs font-bold text-foreground">2. Django API</h5>
-                    <p className="text-[9px] text-muted-foreground mt-0.5">Verifica permisos y audita</p>
-                  </div>
-                  <div className="text-muted-foreground text-xs font-mono">Publish MQTT</div>
-                  <div className="p-3 bg-card rounded-lg border border-border shadow-md">
-                    <Radio className="h-5 w-5 mx-auto text-emerald-500 mb-1" />
-                    <h5 className="text-xs font-bold text-foreground">3. Mosquitto</h5>
-                    <p className="text-[9px] text-muted-foreground mt-0.5">Publica comando en broker</p>
-                  </div>
-                  <div className="text-muted-foreground text-xs font-mono">Subscribe</div>
-                  <div className="p-3 bg-card rounded-lg border border-primary/20 shadow-md">
-                    <Cpu className="h-5 w-5 mx-auto text-primary mb-1" />
-                    <h5 className="text-xs font-bold text-foreground">4. Actuador Real</h5>
-                    <p className="text-[9px] text-muted-foreground mt-0.5">Ejecuta acción física</p>
-                  </div>
-                </div>
+              {/* Gestor de Comandos Modal */}
+              <div className="p-4 bg-slate-900 border border-cyan-800/60 rounded-lg space-y-2 text-xs">
+                <h4 className="font-bold text-cyan-300 text-sm flex items-center gap-2">
+                  <Settings className="h-4 w-4 text-cyan-400" />
+                  Uso del Personalizador de Comandos (`⚙️ Personalizar Comandos`)
+                </h4>
+                <p className="text-slate-300 leading-relaxed">
+                  Desde la pantalla <strong>/scada</strong>, al hacer clic en <strong>Personalizar Comandos</strong> o en el icono de edición de cualquier tarjeta, podés:
+                </p>
+                <ul className="list-disc pl-5 space-y-1 text-slate-400">
+                  <li>Asignar el comando a un sistema específico o a nivel general.</li>
+                  <li>Agrupar controles en paneles visuales personalizados (ej. "Control de Reposición", "Receta Líquidos").</li>
+                  <li>Agregar o quitar parámetros con el menú <strong>➕ Añadir Parámetro</strong>.</li>
+                  <li>Seleccionar entre 2, 3, 4 o 6 bombos con botones de selección directa.</li>
+                </ul>
               </div>
 
               {/* Registro de Auditoría y Borrado */}
@@ -385,7 +395,7 @@ const GuiaSistema = () => {
                   <div className="space-y-1">
                     <h4 className="font-bold">Auditoría Automática</h4>
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      Cualquier acción de control o modificación queda registrada automáticamente en la tabla de **Auditoría** asociando usuario autenticado, IP y marca temporal.
+                      Cada comando transmitido y cada cambio en mapeos queda registrado en la tabla de Auditoría asociando operador, IP y timestamp.
                     </p>
                   </div>
                 </div>
@@ -393,9 +403,9 @@ const GuiaSistema = () => {
                 <div className="flex gap-4 p-4 bg-rose-500/10 border border-rose-500/30 rounded-lg text-sm text-foreground">
                   <Trash2 className="h-6 w-6 text-rose-500 shrink-0" />
                   <div className="space-y-1">
-                    <h4 className="font-bold">Eliminación Atómica Definitiva</h4>
+                    <h4 className="font-bold">Eliminación Segura y Atómica</h4>
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      El backend resuelve la eliminación en cascada (`perform_destroy`) limpiando lecturas residuales, permitiendo borrar cualquier planta, sección, almacenamiento, sensor o empleado de forma inmediata.
+                      El backend resuelve la eliminación en cascada con <code>perform_destroy</code> garantizando consistencia referencial en PostgreSQL.
                     </p>
                   </div>
                 </div>
@@ -404,84 +414,76 @@ const GuiaSistema = () => {
           </Card>
         </TabsContent>
 
-        {/* Tab 5: Guía de Desarrollo */}
+        {/* Tab 5: Guía de Desarrollo & Comandos */}
         <TabsContent value="desarrollo" className="space-y-6 mt-4">
           <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle>Comandos Útiles y Operación en Docker</CardTitle>
+              <CardTitle>Comandos de Mantenimiento y Desarrollo</CardTitle>
               <CardDescription>
-                Instrucciones para gestionar servicios backend, frontend y broker en desarrollo/producción.
+                Guía de comandos para Docker Compose, migraciones, WebSockets y pruebas de consistencia.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <Accordion type="single" collapsible className="w-full">
                 {/* Accordion Item 1 */}
-                <AccordionItem value="worker" className="border-border">
+                <AccordionItem value="docker-dev" className="border-border">
                   <AccordionTrigger className="text-sm font-semibold hover:no-underline">
-                    ¿Cómo funciona y cómo levantar `mqtt_worker.py`?
+                    Levantar el stack completo en Docker
                   </AccordionTrigger>
                   <AccordionContent className="space-y-2 text-xs text-muted-foreground">
-                    <p>En el contenedor de backend de Docker corre automáticamente como proceso de fondo. Si deseas ejecutarlo manualmente en desarrollo:</p>
+                    <p>Inicia PostgreSQL, Mosquitto, Backend Django (Daphne) y Frontend Vite:</p>
                     <pre className="bg-muted p-3 rounded border border-border font-mono text-foreground overflow-x-auto">
-                      python manage.py mqtt_worker
+                      docker compose up -d
                     </pre>
                   </AccordionContent>
                 </AccordionItem>
 
                 {/* Accordion Item 2 */}
-                <AccordionItem value="simuladores" className="border-border">
+                <AccordionItem value="migrations" className="border-border">
                   <AccordionTrigger className="text-sm font-semibold hover:no-underline">
-                    ¿Cómo verificar el compilador de TypeScript?
+                    Aplicar migraciones de base de datos en PostgreSQL
                   </AccordionTrigger>
                   <AccordionContent className="space-y-2 text-xs text-muted-foreground">
-                    <p>En el directorio <code>scada-ui</code> podés verificar que no existan errores de tipos:</p>
                     <pre className="bg-muted p-3 rounded border border-border font-mono text-foreground overflow-x-auto">
-                      npx tsc --noEmit
+                      docker compose exec backend python manage.py migrate
                     </pre>
                   </AccordionContent>
                 </AccordionItem>
 
                 {/* Accordion Item 3 */}
-                <AccordionItem value="mosquitto-cli" className="border-border">
+                <AccordionItem value="worker" className="border-border">
                   <AccordionTrigger className="text-sm font-semibold hover:no-underline">
-                    Herramientas de Consola para Monitoreo MQTT
+                    Worker MQTT & Ingesta en Segundo Plano
                   </AccordionTrigger>
-                  <AccordionContent className="space-y-3 text-xs text-muted-foreground">
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Escuchar todo el tráfico MQTT en vivo:</p>
-                      <pre className="bg-muted p-2 rounded border border-border font-mono text-foreground overflow-x-auto">
-                        mosquitto_sub -h localhost -t "#" -v
-                      </pre>
-                    </div>
+                  <AccordionContent className="space-y-2 text-xs text-muted-foreground">
+                    <p>Corre automáticamente en el contenedor <code>scada_backend</code>. Para ejecutarlo manualmente:</p>
+                    <pre className="bg-muted p-3 rounded border border-border font-mono text-foreground overflow-x-auto">
+                      docker compose exec backend python manage.py mqtt_worker
+                    </pre>
                   </AccordionContent>
                 </AccordionItem>
 
                 {/* Accordion Item 4 */}
-                <AccordionItem value="acceso-ngrok" className="border-border">
+                <AccordionItem value="typescript" className="border-border">
                   <AccordionTrigger className="text-sm font-semibold hover:no-underline">
-                    Acceso Remoto Seguro con Ngrok Tunnel y Comunicaciones MQTT Multiregión
+                    Verificación de tipos TypeScript en Frontend
                   </AccordionTrigger>
-                  <AccordionContent className="space-y-3 text-xs text-muted-foreground">
-                    <p>El sistema incluye un contenedor <strong>Ngrok Tunnel (`scada_ngrok_tunnel`)</strong> que expone el frontend y backend a través de una URL pública segura HTTPS sin requerir apertura de puertos en el router:</p>
-                    <p className="font-mono text-primary font-bold bg-muted p-2 rounded border border-border">
-                      https://remarry-anyplace-appraiser.ngrok-free.dev
-                    </p>
-                    <p>El broker Mosquitto escucha en el puerto <code>1883</code> (<code>0.0.0.0</code>), permitiendo conexiones autenticadas desde Gateways y Raspberry Pi ubicados en distintas redes e IPs externas.</p>
+                  <AccordionContent className="space-y-2 text-xs text-muted-foreground">
+                    <pre className="bg-muted p-3 rounded border border-border font-mono text-foreground overflow-x-auto">
+                      cd scada-ui && npx tsc --noEmit
+                    </pre>
                   </AccordionContent>
                 </AccordionItem>
 
                 {/* Accordion Item 5 */}
-                <AccordionItem value="credenciales-permisos" className="border-border">
+                <AccordionItem value="mosquitto-sub" className="border-border">
                   <AccordionTrigger className="text-sm font-semibold hover:no-underline">
-                    Gestión de Credenciales y Matriz de Permisos por Rango (1 a 8)
+                    Monitorear el tráfico MQTT en vivo desde consola
                   </AccordionTrigger>
-                  <AccordionContent className="space-y-3 text-xs text-muted-foreground">
-                    <p>En la nueva sección <strong>`/credenciales`</strong> (acceso exclusivo para Administradores) se centralizan tres paneles clave:</p>
-                    <ul className="list-disc pl-5 space-y-1">
-                      <li><strong>Claves de Registro:</strong> Administración de claves requeridas para dar de alta cuentas de usuario.</li>
-                      <li><strong>Credenciales Mosquitto:</strong> Gestión de usuarios autorizados en el archivo <code>passwd</code> del broker.</li>
-                      <li><strong>Matriz de Permisos por Rango:</strong> Control jerárquico que restringe navegación y acciones según el rango (Rango 8 Admin, Rangos 7-6 Alta Dirección, Rangos 5-3 Mandos Medios, Rangos 2-1 Operativos).</li>
-                    </ul>
+                  <AccordionContent className="space-y-2 text-xs text-muted-foreground">
+                    <pre className="bg-muted p-3 rounded border border-border font-mono text-foreground overflow-x-auto">
+                      docker compose exec mosquitto mosquitto_sub -u admin -P admin -t "#" -v
+                    </pre>
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>
