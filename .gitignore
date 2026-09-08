@@ -75,6 +75,7 @@ KeysRaspberry.txt
 # ==============================================================================
 # 6. Borradores, Propuestas y Notas Locales (Preservadas en Disco)
 # ==============================================================================
+outofcontext.txt
 ANALISIS_IMPLEMENTACION_MQTT*.md
 BACKEND_MQTT_PLAN*.md
 MOSQUITTO_PASSWORD_UI_PROPOSAL*.txt
