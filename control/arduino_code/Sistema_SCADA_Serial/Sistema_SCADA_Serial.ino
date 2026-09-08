@@ -112,7 +112,7 @@ float Fporcentaje3 = 0.0;
 // ============================================================
 
 #define NUM_READINGS 10  // Número de lecturas a promediar
-#define ALPHA 0.9      // Factor suavizado exponencial (0-1: menor=más suave, más latencia)
+#define ALPHA 0.8      // Factor suavizado exponencial (0-1: menor=más suave, más latencia)
 
 float readings1[NUM_READINGS];
 float readings2[NUM_READINGS];
