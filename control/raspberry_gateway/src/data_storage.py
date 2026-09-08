@@ -479,6 +479,84 @@ class DataStorage:
             logger.error(f"Error obteniendo alarmas: {e}")
             return []
     
+    def get_latest_measurement(self) -> Optional[Dict[str, Any]]:
+        """
+        Obtiene la última medición registrada
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT * FROM mediciones
+                    ORDER BY id DESC
+                    LIMIT 1
+                ''')
+                row = cursor.fetchone()
+                return dict(row) if row else None
+        except Exception as e:
+            logger.error(f"Error obteniendo última medición: {e}")
+            return None
+
+    def get_recent_commands(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Obtiene los comandos más recientes
+        
+        Args:
+            limit: Cantidad de comandos a retornar
+            
+        Returns:
+            Lista de comandos
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT id, timestamp, fecha_hora, comando, parametros_json, origen, ejecutado
+                    FROM comandos
+                    ORDER BY id DESC
+                    LIMIT ?
+                ''', (limit,))
+                rows = cursor.fetchall()
+                return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Error obteniendo comandos recientes: {e}")
+            return []
+
+    def get_recent_events(self, limit: int = 10, tipo: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Obtiene los eventos más recientes
+        
+        Args:
+            limit: Cantidad de eventos a retornar
+            tipo: Filtrar por tipo (opcional)
+            
+        Returns:
+            Lista de eventos
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                if tipo:
+                    cursor.execute('''
+                        SELECT id, timestamp, fecha_hora, tipo, descripcion, datos_json, origen
+                        FROM eventos
+                        WHERE tipo = ?
+                        ORDER BY id DESC
+                        LIMIT ?
+                    ''', (tipo, limit))
+                else:
+                    cursor.execute('''
+                        SELECT id, timestamp, fecha_hora, tipo, descripcion, datos_json, origen
+                        FROM eventos
+                        ORDER BY id DESC
+                        LIMIT ?
+                    ''', (limit,))
+                rows = cursor.fetchall()
+                return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Error obteniendo eventos recientes: {e}")
+            return []
+
     def cleanup_old_data(self):
         """
         Limpia datos más antiguos que el período de retención

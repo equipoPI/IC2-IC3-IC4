@@ -69,6 +69,7 @@ class ArduinoSerial:
         # Historial de últimos datos
         self.last_sent_command: Optional[Dict[str, Any]] = None
         self.last_received_data: Optional[Dict[str, Any]] = None
+        self.last_raw_line: Optional[str] = None
         
         logger.info(f"ArduinoSerial inicializado para puerto {self.port} @ {self.baudrate}")
     
@@ -217,6 +218,8 @@ class ArduinoSerial:
                         line = self.serial_conn.readline().decode('utf-8').strip()
                         
                         if line:
+                            with self.data_lock:
+                                self.last_raw_line = line
                             # Parsear datos
                             data = self._parse_arduino_data(line)
                             
