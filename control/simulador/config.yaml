@@ -171,7 +171,7 @@ mqtt:
       configuracion: configuracion
       consultas: consultas/historico
     subscribe_filters:
-    - '{tenant}/{gateway_id}/cmd/#'
+    - '{tenant}/{gateway_id}/#'
   username: admin
 planta:
   capacidades:

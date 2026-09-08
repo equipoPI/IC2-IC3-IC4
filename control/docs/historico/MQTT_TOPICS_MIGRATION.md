@@ -14,17 +14,15 @@ Los formatos legacy han sido **deshabilitados** en la configuración.
 | Formato Antiguo | Tipo | Estado | Alternativa |
 |--|--|--|--|
 | `scada/planta1/sensores/nivel/bombo1` | Telemetría | ❌ Deshabilitado | `Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/sensores/nivel_bombo1` |
-| `scada/planta1/comandos/reposicion` | Comando | ❌ Deshabilitado | `Rafaela_S.A/d83add60dbb0/cmd/A1/linea_mezclado_1/reposicion` |
-| `{tenant}/{gateway_id}/cmd/reposicion` | Comando | ❌ Deshabilitado | `Rafaela_S.A/d83add60dbb0/cmd/A1/linea_mezclado_1/reposicion` |
-| `{tenant}/{gateway_id}/cmd/DEV-001` | Comando directo | ❌ Deshabilitado | `Rafaela_S.A/d83add60dbb0/cmd/A1/linea_mezclado_1/accion` |
+| `scada/planta1/comandos/reposicion` | Comando | ❌ Deshabilitado | `Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/reposicion` |
+| `{tenant}/{gateway_id}/cmd/reposicion` | Comando | ❌ Deshabilitado | `Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/reposicion` |
+| `{tenant}/{gateway_id}/cmd/DEV-001` | Comando directo | ❌ Deshabilitado | `Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/accion` |
 
 ### ✅ Formato Estándar (NUEVO - Obligatorio)
 
 ```
 {tenant}/{gateway_id}/{seccion}/{sistema}/{variable}
-                     └─── cmd ────┘ para comandos
-                           ↓
-Rafaela_S.A/d83add60dbb0/cmd/A1/linea_mezclado_1/reposicion
+Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/reposicion
 Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/sensores/nivel_bombo1
 ```
 
@@ -64,7 +62,7 @@ Rafaela_S.A/d83add60dbb0/status
 
 ```yaml
 # Formato único de comandos:
-{tenant}/{gateway_id}/cmd/{seccion}/{sistema}/{accion}
+{tenant}/{gateway_id}/{seccion}/{sistema}/{accion}
 
 # Acciones soportadas:
 reposicion      # Reposición de bombos
@@ -75,9 +73,9 @@ vaciar          # Vaciar contenedor
 desechar        # Desechar mezcla
 
 # Ejemplos reales:
-Rafaela_S.A/d83add60dbb0/cmd/A1/linea_mezclado_1/reposicion
-Rafaela_S.A/d83add60dbb0/cmd/A1/linea_mezclado_1/detener
-Rafaela_S.A/d83add60dbb0/cmd/A1/linea_mezclado_1/reanudar
+Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/reposicion
+Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/detener
+Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/reanudar
 ```
 
 ---
@@ -94,7 +92,7 @@ mqtt:
   topics:
     enable_legacy_topics: false  # ✅ Deshabilitado
     subscribe_filters:
-      - '{tenant}/{gateway_id}/cmd/#'  # Suscribe a todos los comandos
+      - '{tenant}/{gateway_id}/#'  # Suscribe a todos los comandos (sin /cmd/)
 ```
 
 ### Simulador (`control/simulador/config.yaml`)
@@ -107,7 +105,7 @@ mqtt:
   topics:
     enable_legacy_topics: false  # ✅ Deshabilitado
     subscribe_filters:
-      - '{tenant}/{gateway_id}/cmd/#'
+      - '{tenant}/{gateway_id}/#'  # Suscribe a todos los comandos (sin /cmd/)
 ```
 
 ---
@@ -118,7 +116,7 @@ mqtt:
 ```bash
 mosquitto_pub \
   -h 192.168.137.1 \
-  -t "Rafaela_S.A/d83add60dbb0/cmd/A1/linea_mezclado_1/reposicion" \
+  -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/reposicion" \
   -m '{"bombo": 1, "limite_porcentaje": 75}'
 ```
 
@@ -126,7 +124,7 @@ mosquitto_pub \
 ```bash
 mosquitto_pub \
   -h 192.168.137.1 \
-  -t "Rafaela_S.A/d83add60dbb0/cmd/A1/linea_mezclado_1/detener" \
+  -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/detener" \
   -m '{}'
 ```
 

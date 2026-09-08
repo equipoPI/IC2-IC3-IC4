@@ -93,8 +93,209 @@ sudo chmod 666 /dev/ttyACM0  # o /dev/ttyUSB0
 ### 3. Configurar como servicio (autoarranque)
 ```bash
 sudo cp raspberry_gateway.service /etc/systemd/system/
+sudo systemctl daemon-reload
 sudo systemctl enable raspberry_gateway
 sudo systemctl start raspberry_gateway
+sudo systemctl status raspberry_gateway
+```
+
+---
+
+## 🚀 Instalación Completa en Raspberry Pi (Producción)
+
+### Preparación Remota
+
+**Desde tu máquina local:**
+```bash
+# Copiar código a la RPi
+scp -r /home/lautaro/Proyects/IC2-IC3/control/raspberry_gateway/* \
+    pi@<IP_RASPBERRYPI>:/home/pi/scada_gateway/
+
+# O usar git si tienes repositorio configurado
+ssh pi@<IP_RASPBERRYPI>
+cd /opt/scada_gateway
+git clone <tu-repo> .
+```
+
+### Instalación en la RPi
+
+**Conectar a la RPi:**
+```bash
+ssh pi@<IP_RASPBERRYPI>
+
+# Crear directorio de instalación
+sudo mkdir -p /opt/scada_gateway
+cd /opt/scada_gateway
+
+# Crear entorno virtual
+python3 -m venv venv
+source venv/bin/activate
+
+# Instalar dependencias
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Configurar permisos serial (Arduino)
+sudo usermod -a -G dialout $USER
+sudo chmod 666 /dev/ttyACM0  # o /dev/ttyUSB0 según tu Arduino
+```
+
+### Configurar como Servicio Systemd
+
+**Instalar el service file:**
+```bash
+# Copiar service file a systemd
+sudo cp raspberry_gateway.service /etc/systemd/system/
+sudo chmod 644 /etc/systemd/system/raspberry_gateway.service
+
+# Actualizar systemd
+sudo systemctl daemon-reload
+
+# Habilitar autoarranque
+sudo systemctl enable raspberry_gateway
+
+# Iniciar el servicio
+sudo systemctl start raspberry_gateway
+
+# Verificar que está corriendo
+sudo systemctl status raspberry_gateway
+```
+
+### Comandos Útiles (Producción)
+
+```bash
+# Ver estado del gateway
+sudo systemctl status raspberry_gateway
+
+# Ver logs en tiempo real
+sudo journalctl -u raspberry_gateway -f
+
+# Ver últimas 100 líneas de logs
+sudo journalctl -u raspberry_gateway -n 100
+
+# Ver logs desde hace 1 hora
+sudo journalctl -u raspberry_gateway --since "1 hour ago"
+
+# Detener el gateway (cierre seguro, timeout 10s)
+sudo systemctl stop raspberry_gateway
+
+# Reiniciar el gateway
+sudo systemctl restart raspberry_gateway
+
+# Ver si está habilitado para autostart
+sudo systemctl is-enabled raspberry_gateway
+
+# Deshabilitar autostart (si es necesario)
+sudo systemctl disable raspberry_gateway
+```
+
+### Troubleshooting - Problemas Comunes
+
+#### El servicio no inicia
+```bash
+# Ver el error exacto
+sudo journalctl -u raspberry_gateway -n 50
+
+# Verificar permisos del archivo service
+ls -la /etc/systemd/system/raspberry_gateway.service
+# Debe ser 644 (rw-r--r--)
+
+# Si cambias permisos, actualiza systemd
+sudo systemctl daemon-reload
+```
+
+#### El gateway se queda "stuck" y no responde a stop
+```bash
+# Ver procesos activos
+ps aux | grep gateway
+
+# Systemd debe detener correctamente en ≤10 segundos
+# Si se queda, ver logs
+sudo journalctl -u raspberry_gateway -n 50 | grep -i kill
+
+# Última opción: kill forzado
+sudo pkill -9 -f gateway_main
+```
+
+#### Puertos/conexiones MQTT no se liberan
+```bash
+# Ver puertos abiertos
+netstat -tlnp | grep 1883
+
+# Ver procesos usando el puerto
+lsof -i :1883
+
+# Reiniciar el servicio
+sudo systemctl restart raspberry_gateway
+```
+
+---
+
+## 🔄 Actualizaciones en Producción
+
+Cuando necesites actualizar el código en la RPi:
+
+```bash
+# 1. Detener el servicio
+sudo systemctl stop raspberry_gateway
+
+# 2. Copiar nuevo código
+scp -r /home/lautaro/Proyects/IC2-IC3/control/raspberry_gateway/* \
+    pi@<IP>:/opt/scada_gateway/
+
+# 3. Si cambió requirements.txt, actualizar dependencias
+ssh pi@<IP>
+cd /opt/scada_gateway
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 4. Reiniciar
+sudo systemctl restart raspberry_gateway
+
+# 5. Verificar
+sudo systemctl status raspberry_gateway
+```
+
+---
+
+## 🛑 Cierre Seguro con Systemd
+
+### Configuración del Service File
+
+El archivo `raspberry_gateway.service` incluye estas configuraciones críticas:
+
+```ini
+Environment="PYTHONPATH=/opt/scada_gateway"
+Environment="DISPLAY="           # Desactiva GUI en systemd (evita Tkinter stuck)
+KillMode=mixed                   # Permite cierre seguro
+KillSignal=SIGTERM              # Señal de terminación
+TimeoutStopSec=10               # Timeout de 10 segundos antes de SIGKILL
+```
+
+**¿Por qué es importante esto?**
+
+- **GUI en Raspberry**: Cuando se ejecuta vía systemd, Tkinter no tiene DISPLAY configurado, por lo que la GUI se desactiva automáticamente y el proceso corre en background limpiamente
+- **Cierre seguro**: El sistema espera máximo 10 segundos para que el proceso termine. Si no responde en ese tiempo, usa SIGKILL
+- **SIGTERM handling**: El código en `gateway_main.py` captura SIGTERM para cerrar correctamente conexiones y liberar recursos
+
+### Comportamiento Esperado
+
+**Ejecución manual (desde terminal con monitor):**
+```bash
+PYTHONPATH=/opt/scada_gateway python /opt/scada_gateway/src/gateway_main.py
+```
+- ✅ GUI se muestra si hay monitor/DISPLAY
+- ✅ Ctrl+C detiene correctamente
+- ✅ Botón "Salir" cierra limpiamente
+
+**Ejecución con Systemd (autostart):**
+```bash
+sudo systemctl start raspberry_gateway
+```
+- ✅ GUI se desactiva automáticamente (DISPLAY="")
+- ✅ Gateway corre en background
+- ✅ `systemctl stop` detiene en ≤10 segundos
+- ✅ Se reinicia automáticamente en crashes (Restart=always)
 
 ## 📁 Base de datos local (data/scada_local.db)
 
@@ -209,27 +410,67 @@ Rafaela_S.A/d83add60dbb0/status                                         # Estado
 #### Suscripción - Comandos (App Web → Raspberry)
 **Formato único de comandos:**
 ```
-Rafaela_S.A/d83add60dbb0/cmd/{seccion}/{sistema}/{accion}
+Rafaela_S.A/d83add60dbb0/{seccion}/{sistema}/{accion}
 
-Ejemplos:
-Rafaela_S.A/d83add60dbb0/cmd/A1/linea_mezclado_1/reposicion     # Comando de reposición
-Rafaela_S.A/d83add60dbb0/cmd/A1/linea_mezclado_1/detener        # Detener mezcla
-Rafaela_S.A/d83add60dbb0/cmd/A1/linea_mezclado_1/reanudar       # Reanudar mezcla
-Rafaela_S.A/d83add60dbb0/cmd/A1/linea_mezclado_1/vaciar         # Vaciar
-Rafaela_S.A/d83add60dbb0/cmd/A1/linea_mezclado_1/desechar       # Desechar
+Acciones disponibles:
+- reposicion         # Reposición de bombos
+- freno_reposicion   # Detener reposición
+- detener            # Detener mezcla
+- reanudar           # Reanudar mezcla
+- vaciar             # Vaciar contenedor
+- desechar           # Desechar mezcla
+- mezcla             # Preparar mezcla (configuración de líquidos)
 ```
 
-#### Acciones Soportadas en /cmd/
-```yaml
-reposicion:     # Reposición de bombos (requiere: bombo, limite_porcentaje)
-freno_reposicion: # Detener reposición
-detener:        # Detener/pausar mezcla
-reanudar:       # Reanudar mezcla
-vaciar:         # Vaciar contenedor mezcla
-desechar:       # Desechar mezcla
-continuar:      # Alias de reanudar
-frenar:         # Alias de freno_reposicion
+#### Ejemplos de Comandos con JSON
+```bash
+# 1. Reposición (bombo 1 al 75%)
+mosquitto_pub -h 192.168.137.1 \
+  -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/reposicion" \
+  -m '{"bombo": 1, "limite_porcentaje": 75}'
+
+# 2. Freno Reposición
+mosquitto_pub -h 192.168.137.1 \
+  -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/freno_reposicion" \
+  -m '{}'
+
+# 3. Detener Mezcla
+mosquitto_pub -h 192.168.137.1 \
+  -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/detener" \
+  -m '{}'
+
+# 4. Reanudar Mezcla
+mosquitto_pub -h 192.168.137.1 \
+  -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/reanudar" \
+  -m '{}'
+
+# 5. Vaciar Contenedor
+mosquitto_pub -h 192.168.137.1 \
+  -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/vaciar" \
+  -m '{}'
+
+# 6. Desechar Mezcla
+mosquitto_pub -h 192.168.137.1 \
+  -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/desechar" \
+  -m '{}'
+
+# 7. Preparar Mezcla (50% liq1, 30% liq2, 15 minutos)
+mosquitto_pub -h 192.168.137.1 \
+  -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/mezcla" \
+  -m '{"liquido_1": 50, "liquido_2": 30, "hora": 0, "minuto": 15}'
 ```
+
+#### Estructura de Payloads JSON
+
+| Acción | Payload | Notas |
+|--------|---------|-------|
+| `reposicion` | `{"bombo": 1, "limite_porcentaje": 75}` | bombo: 1-2, límite: 0-100 |
+| `freno_reposicion` | `{}` | Sin parámetros |
+| `detener` | `{}` | Sin parámetros |
+| `reanudar` | `{}` | Sin parámetros |
+| `vaciar` | `{}` | Sin parámetros |
+| `desechar` | `{}` | Sin parámetros |
+| `mezcla` | `{"liquido_1": 50, "liquido_2": 30, "hora": 0, "minuto": 15}` | liquido_1/2: 0-100, hora: 0-23, minuto: 0-59 |
 
 #### 🚫 Topics Legacy (DEPRECADOS - No usar)
 ```yaml
@@ -294,7 +535,7 @@ sudo journalctl -u raspberry_gateway -f
 mosquitto_sub -h 192.168.137.1 -t "Rafaela_S.A/d83add60dbb0/#" -v
 
 # Enviar comando de prueba (reposición)
-mosquitto_pub -h 192.168.137.1 -t "Rafaela_S.A/d83add60dbb0/cmd/A1/linea_mezclado_1/reposicion" \
+mosquitto_pub -h 192.168.137.1 -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/reposicion" \
   -m '{"bombo": 1, "limite_porcentaje": 75}'
 
 # Verificar conexión del gateway

@@ -70,19 +70,19 @@ arduino_protocol:
     continuar: A
     descartar: X
     desechar: X
+    desechar_mezcla: X
     detener: D
+    detener_mezcla: D
     frenar: F
     hora: H{valor}
     liquido_1: L1{valor}
     liquido_2: L2{valor}
     minuto: M{valor}
     reanudar: A
+    reanudar_mezcla: A
     reposicion: R{valor}
     vaciar: V
-    detener_mezcla: D
-    reanudar_mezcla: A
     vaciar_mezcla: V
-    desechar_mezcla: X
 database:
   auto_vacuum: true
   backup_enabled: true
@@ -136,14 +136,14 @@ logging:
 mqtt:
   broker: 192.168.137.1
   client_id: ''
-  default_sector: A1
+  default_sector: a1
   default_system: linea_mezclado_1
   gateway_id: d83add60dbb0
   keepalive: 60
   password: admin
   port: 1883
   qos: 1
-  tenant: Rafaela_S.A
+  tenant: rafaela_sa
   tls:
     ca_certs: /etc/ssl/certs/ca-certificates.crt
     certfile: null
@@ -173,8 +173,9 @@ mqtt:
       comandos_repo: comandos/reposicion
       configuracion: configuracion
       consultas: consultas/historico
-    subscribe_filters:
-    - '{tenant}/{gateway_id}/cmd/#'
+    subscribe_filters: []
+    # Nota: Los filtros se construyen dinámicamente desde la sección 'subscribe' arriba.
+    # Esto permite suscribirse SOLO a topics específicos sin wildcard.
   username: admin
 planta:
   capacidades:

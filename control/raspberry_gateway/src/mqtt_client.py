@@ -44,14 +44,18 @@ class MQTTClient:
         self.keepalive = self.mqtt_config.get("keepalive", 60)
         self.qos = self.mqtt_config.get("qos", 1)
 
-        # Identidad estándar (el usuario usará `tenant` para indicar la fábrica)
-        self.tenant = self._sanitize_token(self.mqtt_config.get("tenant", "planta"))
-        self.gateway_id = self._resolve_gateway_id()
+        # Identidad estándar - SIEMPRE minúsculas para topics MQTT
+        raw_tenant = self.mqtt_config.get("tenant", "planta").strip()
+        self.tenant = self._sanitize_token(raw_tenant)  # → minúsculas
+        
+        raw_gateway = self._resolve_gateway_id()
+        self.gateway_id = self._sanitize_token(raw_gateway)  # → minúsculas
+        
         # Generar un sufijo aleatorio para evitar conflictos de client_id en el broker
         random_suffix = f"_{uuid.uuid4().hex[:6]}"
         self.client_id = self.mqtt_config.get("client_id") or f"rpi_{self.gateway_id}{random_suffix}"
 
-        # Defaults para publicar telemetría estructurada
+        # Defaults para publicar telemetría estructurada - SIEMPRE minúsculas
         self.default_sector = self._sanitize_token(self.mqtt_config.get("default_sector", "sector_general"))
         self.default_system = self._sanitize_token(self.mqtt_config.get("default_system", "sistema_general"))
 
@@ -98,18 +102,47 @@ class MQTTClient:
 
     @property
     def topic_prefix(self) -> str:
+        """Retorna el prefijo de topic en minúsculas: tenant/gateway_id"""
         return f"{self.tenant}/{self.gateway_id}"
+    
+    def get_subscribe_topics_info(self) -> List[Dict[str, str]]:
+        """Retorna información sobre los topics a los que se suscribe"""
+        topics_info = []
+        for name, path in self.subscribe_topics.items():
+            full_topic = f"{self.topic_prefix}/{self.default_sector}/{self.default_system}/{path}"
+            topics_info.append({
+                "nombre": name,
+                "topic": full_topic,
+                "tipo": "comando"
+            })
+        return topics_info
+    
+    def get_publish_topics_info(self) -> List[Dict[str, str]]:
+        """Retorna información sobre los topics que publica"""
+        topics_info = []
+        for name, path in self.publish_topics.items():
+            full_topic = f"{self.topic_prefix}/{self.default_sector}/{self.default_system}/{path}"
+            topics_info.append({
+                "nombre": name,
+                "topic": full_topic,
+                "tipo": "telemetría"
+            })
+        return topics_info
 
     def _sanitize_token(self, value: str) -> str:
+        """Convierte a minúsculas y remueve caracteres no permitidos en MQTT topics"""
         token = str(value).strip().lower().replace(" ", "_")
+        # Solo permitir: a-z, 0-9, guión bajo (_), guión (-)
         token = re.sub(r"[^a-z0-9_\-]", "", token)
         return token or "na"
 
     def _resolve_gateway_id(self) -> str:
+        """Obtiene el ID del gateway (será sanitizado a minúsculas después)"""
         forced_id = self.mqtt_config.get("gateway_id")
         if forced_id:
-            return self._sanitize_token(forced_id)
+            return forced_id.strip()  # Será sanitizado en __init__
 
+        # Si no hay ID forzado, generar desde MAC
         mac_int = uuid.getnode()
         return f"{mac_int:012x}"
 
@@ -121,20 +154,41 @@ class MQTTClient:
         )
 
     def _build_subscribe_filters(self, configured_filters: List[str]) -> List[str]:
-        filters: List[str] = [f"{self.topic_prefix}/cmd/#"]
-
+        """
+        Construye la lista de topics a los que se suscribe.
+        ✅ IMPORTANTE: Se suscribe SOLO a los comandos que necesita procesar,
+        NO a todo con wildcard (#). Esto evita recibir datos que el gateway mismo publica.
+        """
+        filters: List[str] = []
+        
+        # ✅ Construir topics específicos para COMANDOS
+        # subscribe_topics contiene: {reposicion, mezcla, freno_reposicion, configuracion, consultas}
+        for cmd_name, cmd_path in self.subscribe_topics.items():
+            # Construir topic completo: tenant/gateway_id/sector/sistema/comando
+            full_topic = f"{self.topic_prefix}/{self.default_sector}/{self.default_system}/{cmd_path}"
+            filters.append(full_topic)
+            logger.debug(f"📥 Se suscribe a comando: {full_topic}")
+        
+        # Agregar filtros configurados (si los hay)
         for f in configured_filters:
-            filters.append(self._apply_topic_tokens(f))
-
+            applied = self._apply_topic_tokens(f)
+            if applied not in filters:
+                filters.append(applied)
+        
+        # Legacy topics (si están habilitados)
         if self.enable_legacy_topics:
             for _, topic_path in self.subscribe_topics.items():
-                filters.append(f"{self.legacy_base_topic}/{topic_path}")
-
+                legacy = f"{self.legacy_base_topic}/{topic_path}"
+                if legacy not in filters:
+                    filters.append(legacy)
+        
+        # Remover duplicados y retornar
         unique_filters = []
         for f in filters:
             if f and f not in unique_filters:
                 unique_filters.append(f)
-
+        
+        logger.info(f"✅ Filtros de suscripción construidos ({len(unique_filters)} topics específicos)")
         return unique_filters
 
     def rebuild_subscribe_filters(self):
@@ -169,47 +223,45 @@ class MQTTClient:
             self.stats["errors"] += 1
 
     def _extract_command_meta(self, topic: str) -> Optional[Dict[str, str]]:
-        prefix = f"{self.topic_prefix}/cmd/"
-        if topic.startswith(prefix):
-            path = topic[len(prefix):].strip("/")
-            parts = [p for p in path.split("/") if p]
-            if not parts:
-                return None
+        # Estructura estándar: {tenant}/{gateway_id}/{sector}/{sistema}/{accion}
+        prefix = f"{self.topic_prefix}/"
+        if not topic.startswith(prefix):
+            return None
+        
+        path = topic[len(prefix):].strip("/")
+        parts = [p for p in path.split("/") if p]
+        
+        # Necesitamos al menos: sector/sistema/accion (3 partes)
+        if len(parts) < 3:
+            return None
 
-            action = parts[-1]
-            context = parts[:-1]
+        action = parts[-1]
+        
+        # Verificar que la última parte sea una acción conocida
+        known_actions = [
+            "reposicion", "freno_reposicion", "detener", "reanudar", 
+            "vaciar", "desechar", "mezcla", "configuracion", "consultas", 
+            "control", "accion", "continuar", "frenar", "parar", "pausar",
+            "descartar"
+        ]
+        
+        if action.lower() not in known_actions:
+            return None
 
-            meta = {
-                "action": action,
-                "path": path,
-                "scope": "standard",
-            }
+        meta = {
+            "action": action,
+            "path": path,
+            "scope": "standard",
+        }
 
-            if len(context) >= 1:
-                meta["sector"] = self._sanitize_token(context[0])
-            if len(context) >= 2:
-                meta["system"] = self._sanitize_token(context[1])
-            if len(context) >= 3:
-                meta["device"] = self._sanitize_token(context[2])
+        if len(parts) >= 1:
+            meta["sector"] = self._sanitize_token(parts[0])
+        if len(parts) >= 2:
+            meta["system"] = self._sanitize_token(parts[1])
+        if len(parts) >= 4:
+            meta["device"] = self._sanitize_token(parts[3])
 
-            return meta
-
-        # Soporte jerárquico: tenant/gateway_id/seccion/sistema/accion o .../reposicion
-        parts = [p for p in topic.split("/") if p]
-        if len(parts) >= 3:
-            last_part = parts[-1].lower()
-            if last_part in ["accion", "control", "reposicion", "mezcla", "configuracion"]:
-                meta = {
-                    "action": "control" if last_part == "accion" else last_part,
-                    "path": topic,
-                    "scope": "hierarchical",
-                }
-                if len(parts) >= 5:
-                    meta["sector"] = self._sanitize_token(parts[2])
-                    meta["system"] = self._sanitize_token(parts[3])
-                return meta
-
-        return None
+        return meta
 
     def _extract_legacy_meta(self, topic: str) -> Optional[Dict[str, str]]:
         if not topic.startswith(f"{self.legacy_base_topic}/"):
@@ -302,6 +354,8 @@ class MQTTClient:
             data["_topic_meta"] = command_meta
 
             action = command_meta.get("action")
+            logger.info(f"🔔 Comando MQTT recibido: acción='{action}' | topic='{topic}'")
+            
             # Resolver la acción específica desde el campo 'accion' del payload si la ruta fue /accion
             if action == 'control' and isinstance(data, dict) and data.get('accion'):
                 payload_action = str(data.get('accion')).lower()
@@ -312,10 +366,11 @@ class MQTTClient:
 
             callback = self.command_callbacks.get(action)
             if callback:
+                logger.info(f"✓ Invocando callback para: {action}")
                 callback(data, topic)
                 return
 
-            logger.warning(f"No hay callback registrado para acción: {action}")
+            logger.warning(f"❌ No hay callback registrado para acción: {action}")
             
         except Exception as e:
             logger.error(f"Error procesando mensaje MQTT: {e}")
@@ -331,9 +386,15 @@ class MQTTClient:
         """
         Suscribe a todos los topics configurados
         """
-        for topic_filter in self.subscribe_filters:
+        logger.info("="*70)
+        logger.info("📡 SUSCRIPCIÓN A TOPICS MQTT")
+        logger.info("="*70)
+        logger.info(f"Topic Prefix: {self.topic_prefix}")
+        logger.info(f"Filtros de suscripción:")
+        for i, topic_filter in enumerate(self.subscribe_filters, 1):
+            logger.info(f"  {i}. {topic_filter}")
             self.client.subscribe(topic_filter, qos=self.qos)
-            logger.info(f"Suscrito a topic: {topic_filter}")
+        logger.info("="*70)
     
     def connect(self) -> bool:
         """
@@ -570,6 +631,14 @@ class MQTTClient:
             response_topic = f"resp/{sector}/{system}/{device}/{action}"
         else:
             response_topic = f"resp/{action}"
+
+        logger.debug(f"Construyendo respuesta de comando:")
+        logger.debug(f"  - Acción: {action}")
+        logger.debug(f"  - Sector: {sector}")
+        logger.debug(f"  - System: {system}")
+        logger.debug(f"  - Device: {device}")
+        logger.debug(f"  - Topic de respuesta (sin prefijo): {response_topic}")
+        logger.info(f"✉️  Publicando respuesta: topic='resp/{action}' status='{status}' code={code}")
 
         return self.publish(response_topic, payload, retain=False, qos=self.qos)
     
