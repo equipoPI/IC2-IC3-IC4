@@ -211,7 +211,7 @@ export function GestorComandosModal({
       tipo_control: form.tipo_control,
       categoria_panel: form.categoria_panel || "Controles del Proceso",
       nombre_accion: cleanSubtopic,
-      plantilla_topico: form.plantilla_topico.includes("{accion}") ? form.plantilla_topico : `${form.plantilla_topico}/${cleanSubtopic}`,
+      plantilla_topico: form.plantilla_topico.trim(),
       plantilla_payload_json: form.plantilla_payload_json,
       min_val: Number(form.min_val) || 0,
       max_val: Number(form.max_val) || 100,
