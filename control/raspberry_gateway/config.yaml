@@ -75,9 +75,9 @@ arduino_protocol:
     detener_mezcla: D
     frenar: F
     hora: H{valor}
-    liquido_1: L1{valor}
-    liquido_2: L2{valor}
-    minuto: M{valor}
+    liquido_1: C{valor}
+    liquido_2: c{valor}
+    minuto: h{valor}
     reanudar: A
     reanudar_mezcla: A
     reposicion: R{valor}
@@ -168,11 +168,20 @@ mqtt:
       nivel_mezcla: sensores/nivel/mezcla
       tiempo_restante: proceso/tiempo_restante
     subscribe:
-      comandos_control: comandos/control
-      comandos_mezcla: comandos/mezcla
-      comandos_repo: comandos/reposicion
+      reposicion: reposicion
+      freno_reposicion: freno_reposicion
+      mezcla: mezcla
+      detener: detener
+      reanudar: reanudar
+      vaciar: vaciar
+      desechar: desechar
+      accion: accion
+      control: control
       configuracion: configuracion
       consultas: consultas/historico
+      comandos_repo: comandos/reposicion
+      comandos_mezcla: comandos/mezcla
+      comandos_control: comandos/control
     subscribe_filters: []
     # Nota: Los filtros se construyen dinámicamente desde la sección 'subscribe' arriba.
     # Esto permite suscribirse SOLO a topics específicos sin wildcard.

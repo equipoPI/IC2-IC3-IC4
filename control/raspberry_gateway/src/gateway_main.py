@@ -139,8 +139,14 @@ class SCADAGateway:
             logger.info("Inicializando cliente MQTT...")
             self.mqtt = MQTTClient(config_path=self.config_path, data_lock=self._data_lock)
             self.mqtt.register_command_callback('reposicion', self._on_command_reposicion)
+            self.mqtt.register_command_callback('freno_reposicion', self._on_command_freno_reposicion)
             self.mqtt.register_command_callback('mezcla', self._on_command_mezcla)
+            self.mqtt.register_command_callback('detener', lambda data, topic: self._on_direct_control('DETENER', data, topic))
+            self.mqtt.register_command_callback('reanudar', lambda data, topic: self._on_direct_control('REANUDAR', data, topic))
+            self.mqtt.register_command_callback('vaciar', lambda data, topic: self._on_direct_control('VACIAR', data, topic))
+            self.mqtt.register_command_callback('desechar', lambda data, topic: self._on_direct_control('DESECHAR', data, topic))
             self.mqtt.register_command_callback('control', self._on_command_control)
+            self.mqtt.register_command_callback('accion', self._on_command_control)
             self.mqtt.register_command_callback('configuracion', self._on_command_config)
             self.mqtt.register_command_callback('consultas', self._on_query_historico)
             
@@ -357,6 +363,37 @@ class SCADAGateway:
             'activa': True
         })
     
+    def _on_command_freno_reposicion(self, data: Dict[str, Any], topic: str):
+        """
+        Procesa freno de emergencia de reposición
+        """
+        try:
+            logger.warning("🚨 FRENO DE EMERGENCIA RECIBIDO: Enviando orden de detención F al Arduino")
+            if self.arduino.send_command('frenar'):
+                logger.success("Freno de emergencia (Comando F) enviado al Arduino correctamente")
+                self.storage.save_command("F", data, 'mqtt')
+                self.storage.save_event('comando', 'FRENO DE EMERGENCIA REPOSICIÓN', data, 'mqtt')
+                self.stats['commands_sent'] += 1
+                self._publish_command_response(
+                    data,
+                    topic,
+                    status="executed",
+                    code=0,
+                    result={"accion": "frenar", "freno": True},
+                )
+            else:
+                logger.error("Error enviando comando F de freno de emergencia")
+                self._publish_command_response(
+                    data,
+                    topic,
+                    status="failed",
+                    code=3,
+                    result={},
+                    error="No se pudo enviar comando F de freno al Arduino",
+                )
+        except Exception as e:
+            logger.error(f"Error procesando freno de reposición: {e}")
+
     def _on_command_reposicion(self, data: Dict[str, Any], topic: str):
         """
         Procesa comandos de reposición desde MQTT
@@ -371,32 +408,20 @@ class SCADAGateway:
                 return
 
             accion_req = str(data.get('accion', '')).upper()
-            is_freno = data.get('freno', False) is True or accion_req in ['FRENO', 'FRENO_REPOSICION', 'PARAR', 'DETENER', 'EMERGENCIA']
+            is_freno = (
+                topic.lower().endswith('freno_reposicion')
+                or 'freno' in topic.lower()
+                or data.get('freno', False) is True 
+                or accion_req in ['FRENO', 'FRENO_REPOSICION', 'PARAR', 'DETENER', 'EMERGENCIA']
+            )
 
             if is_freno:
-                logger.warning("🚨 FRENO DE EMERGENCIA RECIBIDO: Enviando orden de detención F al Arduino")
-                if self.arduino.send_command('frenar'):
-                    logger.success("Freno de emergencia (Comando F) enviado al Arduino correctamente")
-                    self.storage.save_command("F", data, 'mqtt')
-                    self.storage.save_event('comando', 'FRENO DE EMERGENCIA REPOSICIÓN', data, 'mqtt')
-                    self.stats['commands_sent'] += 1
-                    self._publish_command_response(
-                        data,
-                        topic,
-                        status="executed",
-                        code=0,
-                        result={"accion": "frenar", "freno": True},
-                    )
-                else:
-                    logger.error("Error enviando comando F de freno de emergencia")
-                    self._publish_command_response(
-                        data,
-                        topic,
-                        status="failed",
-                        code=3,
-                        result={},
-                        error="No se pudo enviar comando F de freno al Arduino",
-                    )
+                self._on_command_freno_reposicion(data, topic)
+                return
+
+            # Validar que contenga parámetros válidos para evitar arrancar reposición con payloads vacíos
+            if not any(k in data for k in ('bombo', 'limite_porcentaje', 'valor', 'limite')):
+                logger.warning(f"Comando en topic '{topic}' ignorado: sin parámetros válidos de reposición: {data}")
                 return
 
             bombo = int(data.get('bombo', 1))
@@ -471,26 +496,45 @@ class SCADAGateway:
             minuto = data.get('minuto')
             logger.debug(f"Parámetros recibidos: L1={liquido_1}, L2={liquido_2}, H={hora}, M={minuto}")
             
-            # Enviar configuración de líquidos
+            # Enviar configuración de líquidos a Arduino
+            # Arduino espera:
+            #   C{10000 + ml} -> Ingrediente 1 (ej: C10500)
+            #   c{20000 + ml} -> Ingrediente 2 (ej: c20250)
+            #   H{hora}       -> Horas
+            #   h{minuto}     -> Minutos (minúscula)
+            #   A             -> Continuar/Iniciar proceso de mezcla
             if liquido_1 is not None:
-                self.arduino.send_command('liquido_1', valor=int(liquido_1))
-                logger.info(f"Cantidad líquido 1 configurada: {liquido_1}")
+                l1_val = float(liquido_1)
+                l1_combo = int(10000 + (l1_val if l1_val > 20 else l1_val * 1000))
+                self.arduino.send_command('liquido_1', valor=l1_combo)
+                self.storage.save_command(f"C{l1_combo}", data, 'mqtt')
+                logger.info(f"Cantidad líquido 1 enviada al Arduino: C{l1_combo}")
             
             if liquido_2 is not None:
-                self.arduino.send_command('liquido_2', valor=int(liquido_2))
-                logger.info(f"Cantidad líquido 2 configurada: {liquido_2}")
+                l2_val = float(liquido_2)
+                l2_combo = int(20000 + (l2_val if l2_val > 20 else l2_val * 1000))
+                self.arduino.send_command('liquido_2', valor=l2_combo)
+                self.storage.save_command(f"c{l2_combo}", data, 'mqtt')
+                logger.info(f"Cantidad líquido 2 enviada al Arduino: c{l2_combo}")
             
             # Enviar tiempo de mezcla
-            if hora is not None:
-                self.arduino.send_command('hora', valor=int(hora))
-                logger.info(f"Horas de mezcla configuradas: {hora}")
+            h_val = int(hora) if hora is not None else 0
+            self.arduino.send_command('hora', valor=h_val)
+            self.storage.save_command(f"H{h_val}", data, 'mqtt')
+            logger.info(f"Horas de mezcla configuradas: H{h_val}")
             
-            if minuto is not None:
-                self.arduino.send_command('minuto', valor=int(minuto))
-                logger.info(f"Minutos de mezcla configurados: {minuto}")
+            m_val = int(minuto) if minuto is not None else 0
+            self.arduino.send_command('minuto', valor=m_val)
+            self.storage.save_command(f"h{m_val}", data, 'mqtt')
+            logger.info(f"Minutos de mezcla configurados: h{m_val}")
+
+            # Enviar orden de arranque (A) al Arduino
+            self.arduino.send_command('continuar')
+            self.storage.save_command("A", data, 'mqtt')
+            logger.info("Orden de inicio de mezcla enviada al Arduino: A")
             
             # Guardar evento
-            self.storage.save_event('comando', 'Configuración de mezcla', data, 'mqtt')
+            self.storage.save_event('comando', f'Mezcla: L1={liquido_1} L2={liquido_2} {h_val:02d}:{m_val:02d}hs', data, 'mqtt')
             self.stats['commands_sent'] += 1
             self._publish_command_response(
                 data,
@@ -516,6 +560,13 @@ class SCADAGateway:
                 error=str(e),
             )
     
+    def _on_direct_control(self, action_name: str, data: Dict[str, Any], topic: str):
+        """Maneja comandos directos como detener, reanudar, vaciar, desechar"""
+        data_copy = dict(data) if isinstance(data, dict) else {}
+        if not data_copy.get('accion'):
+            data_copy['accion'] = action_name
+        self._on_command_control(data_copy, topic)
+
     def _on_command_control(self, data: Dict[str, Any], topic: str):
         """
         Procesa comandos de control general desde MQTT
@@ -564,11 +615,21 @@ class SCADAGateway:
                 'DESCARTAR': 'desechar',
                 'VACIAR': 'vaciar'
             }
+
+            arduino_char_map = {
+                'continuar': 'A',
+                'detener': 'D',
+                'frenar': 'F',
+                'vaciar': 'V',
+                'desechar': 'X'
+            }
             
             if accion in command_map:
                 comando = command_map[accion]
                 if self.arduino.send_command(comando):
-                    logger.info(f"Comando de control enviado: {accion}")
+                    cmd_char = arduino_char_map.get(comando, comando)
+                    self.storage.save_command(cmd_char, data, 'mqtt')
+                    logger.info(f"Comando de control enviado al Arduino: {cmd_char} ({accion})")
                     self.storage.save_event('comando', f'Control: {accion}', data, 'mqtt')
                     self.stats['commands_sent'] += 1
                     self._publish_command_response(

@@ -71,9 +71,9 @@ arduino_protocol:
     detener: D
     frenar: F
     hora: H{valor}
-    liquido_1: L1{valor}
-    liquido_2: L2{valor}
-    minuto: M{valor}
+    liquido_1: C{valor}
+    liquido_2: c{valor}
+    minuto: h{valor}
     reposicion: R{bombo}{valor}
     vaciar: V
     detener_mezcla: D

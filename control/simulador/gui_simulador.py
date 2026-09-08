@@ -684,6 +684,40 @@ Sistema: {sistema}
             self.actuadores_estado["bomba_reposicion"] = act
             self.root.after(0, lambda: self.update_led("bomba_reposicion", act))
 
+        if "mezcla" in topic or "MEZCLA" in up_payload:
+            # En mezcla se encienden ambas bombas de dosificación y el mezclador
+            self.actuadores_estado["pump-1"] = True
+            self.actuadores_estado["pump-2"] = True
+            self.actuadores_estado["mixer-1"] = True
+            self.root.after(0, lambda: self.update_led("pump-1", True))
+            self.root.after(0, lambda: self.update_led("pump-2", True))
+            self.root.after(0, lambda: self.update_led("mixer-1", True))
+
+        if "vaciar" in topic or "desechar" in topic or "VACIAR" in up_payload or "DESECHAR" in up_payload:
+            # Vaciar o desechar activa la bomba del depósito de mezcla (Pin 4) y apaga el mezclador
+            self.actuadores_estado["bomba_mezcla"] = True
+            self.actuadores_estado["pump-1"] = False
+            self.actuadores_estado["pump-2"] = False
+            self.actuadores_estado["mixer-1"] = False
+            self.root.after(0, lambda: self.update_led("bomba_mezcla", True))
+            self.root.after(0, lambda: self.update_led("pump-1", False))
+            self.root.after(0, lambda: self.update_led("pump-2", False))
+            self.root.after(0, lambda: self.update_led("mixer-1", False))
+
+        if "detener" in topic or "DETENER" in up_payload or "PARAR" in up_payload:
+            # Detener para todos los actuadores (incluyendo vaciado de mezcla)
+            for k in self.actuadores_estado.keys():
+                self.actuadores_estado[k] = False
+                dev_k = k
+                self.root.after(0, lambda d=dev_k: self.update_led(d, False))
+
+        if "freno_reposicion" in topic or "FRENO" in up_payload:
+            # Freno de reposición apaga bomba y electroválvulas de reposición
+            for k in ["bomba_reposicion", "electrovalvula-1", "electrovalvula-2"]:
+                self.actuadores_estado[k] = False
+                dev_k = k
+                self.root.after(0, lambda d=dev_k: self.update_led(d, False))
+
     def publicar_manual_ahora(self):
         if not self.is_connected or not self.client:
             messagebox.showwarning("Sin Conexión", "Debes conectar el cliente MQTT primero.")

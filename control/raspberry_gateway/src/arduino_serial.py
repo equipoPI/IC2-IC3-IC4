@@ -279,6 +279,7 @@ class ArduinoSerial:
                                 'timestamp': time.time()
                             }
                         logger.debug(f"Comando enviado: {command}")
+                        time.sleep(0.15)  # Pausa entre comandos para procesamiento en ISR del Arduino
                     else:
                         logger.warning(f"No conectado, comando descartado: {command}")
                 

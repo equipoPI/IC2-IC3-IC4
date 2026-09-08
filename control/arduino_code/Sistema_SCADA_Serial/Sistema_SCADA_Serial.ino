@@ -155,10 +155,18 @@ byte terminoLlenadoLiquido2 = 0;
 
 int TiempoHor = 0;
 int TiempoMin = 0;
-long TiempoHorUso = 0;
-long TiempoMinUso = TiempoMin * 60000;
+unsigned long TiempoHorUso = 0;
+unsigned long TiempoMinUso = 0;
 byte MotorOn = 1;
 byte MotorOff = 0;
+
+// ============================================================
+// CALIBRACIÓN DE CAUDALÍMETROS (Pulsos por Litro)
+// ============================================================
+// Caudalímetro 1 (1/2" YF-S201 nominal 450 p/L, calibrado banco IC1 V4: 1400 p/L)
+#define PULSOS_POR_LITRO_1 1400.0
+// Caudalímetro 2 (1/4" YF-S401 nominal y calibrado IC1 V4: 5880 p/L)
+#define PULSOS_POR_LITRO_2 5880.0
 
 
 // ============================================================
@@ -211,11 +219,14 @@ void setup() {
   // CONFIGURACIÓN CAUDALÍMETROS (INTERRUPCIONES)
   // ============================================================
   
+  pinMode(2, INPUT_PULLUP);
+  pinMode(3, INPUT_PULLUP);
   waterFlow1 = 0;
   waterFlow2 = 0;
   
-  attachInterrupt(digitalPinToInterrupt(2), pulse1, RISING);
-  attachInterrupt(digitalPinToInterrupt(3), pulse2, RISING);
+  // Flanco de bajada (FALLING) para pulsos limpios de sensor Hall
+  attachInterrupt(digitalPinToInterrupt(2), pulse1, FALLING);
+  attachInterrupt(digitalPinToInterrupt(3), pulse2, FALLING);
 
   // ============================================================
   // INICIALIZACIÓN BUFFERS ESTADÍSTICOS
@@ -392,34 +403,38 @@ void filtrado() {
 
 // ============================================================
 // FUNCIÓN: pulse1()
-// Descripción: Interrupción para caudalímetro 1
+// Descripción: Interrupción para caudalímetro 1 (Bombo 1)
 // ============================================================
 
 void pulse1() {
-  waterFlow1 += 1.0 / 450;  // 450 para caudalímetro 1/2 pulgada
+  if (EBomba1 == 1) {
+    waterFlow1 += 1.0 / PULSOS_POR_LITRO_1;
+  }
 }
 
 
 // ============================================================
 // FUNCIÓN: pulse2()
-// Descripción: Interrupción para caudalímetro 2
+// Descripción: Interrupción para caudalímetro 2 (Bombo 2)
 // ============================================================
 
 void pulse2() {
-  if (terminoLlenadoLiquido1 == 1) {
-    waterFlow2 += 1.0 / 450;
+  if (EBomba2 == 1) {
+    waterFlow2 += 1.0 / PULSOS_POR_LITRO_2;
   }
 }
 
 
 // ============================================================
 // FUNCIÓN: caudal()
-// Descripción: Actualiza variables de cantidad de líquidos
+// Descripción: Actualiza variables atómicamente desde interrupción
 // ============================================================
 
 void caudal() {
+  noInterrupts();
   cantidad1 = waterFlow1;
   cantidad2 = waterFlow2;
+  interrupts();
 }
 
 
@@ -433,10 +448,12 @@ void frenadoReposicion() {
   EBombaR = 0;
   EValvula1 = 0;
   EValvula2 = 0;
+  bomboSeleccionado = 0;
+  convinacion = 0;
+  valorMaxReposicion = 0;
   
   // Apagar bomba de reposición
   digitalWrite(9, HIGH);
-  bomboSeleccionado = 0;
   
   // Apagar electroválvulas
   digitalWrite(10, HIGH);  // Electroválvula Bombo 1
@@ -515,43 +532,62 @@ void activacion() {
   }
 
   // ========== CÁLCULO DE TIEMPOS Y LÍQUIDOS ==========
-  TiempoHorUso = TiempoHor * 3600000;
-  TiempoMinUso = TiempoMin * 60000;
+  TiempoHorUso = (unsigned long)TiempoHor * 3600000UL;
+  TiempoMinUso = (unsigned long)TiempoMin * 60000UL;
+  unsigned long duracionMezclaMs = TiempoHorUso + TiempoMinUso;
   
-  liquido1 = (Ingrediente1 - 10000) / 1000;
-  liquido2 = (Ingrediente2 - 20000) / 1000;
+  liquido1 = (Ingrediente1 > 10000) ? ((Ingrediente1 - 10000) / 1000.0) : 0;
+  liquido2 = (Ingrediente2 > 20000) ? ((Ingrediente2 - 20000) / 1000.0) : 0;
 
   // ========== CONTROL DE TRANSFERENCIA DE LÍQUIDOS ==========
-  if (continuar == 1) {
-    // Inicio de transferencia de Bombo 1
-    if (liquido1 > cantidad1 && liquido1 > 0) {
-      digitalWrite(5, LOW);  // Encender bomba depósito 1
-      EBomba1 = 1;
-      EProceso = 1;
-    }
-
-    // Inicio de transferencia de Bombo 2
-    if (liquido2 > cantidad2 && liquido2 > 0 && arranque2 == 1) {
-      digitalWrite(6, LOW);  // Encender bomba depósito 2
-      EBomba2 = 1;
-      EProceso = 1;
-    }
-
-    // Finalización de transferencia de Bombo 1
-    if (liquido1 < cantidad1) {
+  if (continuar == 1 && activarMezcla == 0) {
+    // Si no hay dosificación requerida para transferir en ningún bombo, avanzar directo a mezcla
+    if (liquido1 <= 0 && liquido2 <= 0) {
       terminoLlenadoLiquido1 = 1;
-      digitalWrite(5, HIGH);  // Apagar bomba depósito 1
-      EBomba1 = 0;
-      arranque2 = 1;
+      terminoLlenadoLiquido2 = 1;
+    } else {
+      // Transferencia Bombo 1 (solo si liquido1 > 0)
+      if (liquido1 > 0) {
+        if (cantidad1 < liquido1) {
+          digitalWrite(5, LOW);  // Encender bomba depósito 1
+          EBomba1 = 1;
+          EProceso = 1;
+        } else {
+          terminoLlenadoLiquido1 = 1;
+          digitalWrite(5, HIGH); // Apagar bomba depósito 1
+          EBomba1 = 0;
+          arranque2 = 1;
+        }
+      } else {
+        // Bombo 1 no configurado o en 0: saltearlo pero habilitar Bombo 2 sin dar terminado el líquido 2
+        terminoLlenadoLiquido1 = 1;
+        arranque2 = 1;
+      }
+
+      // Transferencia Bombo 2 (después de terminar o saltear Bombo 1)
+      if (terminoLlenadoLiquido1 == 1) {
+        if (liquido2 > 0) {
+          if (cantidad2 < liquido2) {
+            digitalWrite(6, LOW);  // Encender bomba depósito 2
+            EBomba2 = 1;
+            EProceso = 1;
+          } else {
+            terminoLlenadoLiquido2 = 1;
+            digitalWrite(6, HIGH); // Apagar bomba depósito 2
+            EBomba2 = 0;
+            arranque2 = 0;
+          }
+        } else {
+          // Bombo 2 no configurado o en 0: terminado
+          terminoLlenadoLiquido2 = 1;
+          arranque2 = 0;
+        }
+      }
     }
 
-    // Finalización de transferencia de Bombo 2
-    if (liquido2 < cantidad2 && terminoLlenadoLiquido1 == 1) {
-      terminoLlenadoLiquido2 = 1;
-      digitalWrite(6, HIGH);  // Apagar bomba depósito 2
-      EBomba2 = 0;
-      arranque2 = 0;
-    }
+    // Retroalimentación de tiempo configurado mientras se transfieren líquidos
+    horaRest = TiempoHor;
+    minRest = TiempoMin;
 
     // Activar mezcla cuando ambos líquidos están transferidos
     if (terminoLlenadoLiquido1 == 1 && terminoLlenadoLiquido2 == 1) {
@@ -561,72 +597,142 @@ void activacion() {
       liquido1 = 0;
       liquido2 = 0;
       TInicioMezclado = millis();
-    }
-  }
-
-  // ========== CONTROL DE MEZCLADO (ON/OFF INTERMITENTE) ==========
-  if (activarMezcla == 1) {
-    unsigned long currentMillis = millis();
-    EProceso = 1;
-
-    // Encender el motor por TiempoMotorOn
-    if ((currentMillis - previousMillis) >= TiempoMotorOn && MotorOn == 1) {
-      digitalWrite(7, HIGH);  // Apagar motor
-      previousMillis = currentMillis;
-      MotorOn = 0;
-      MotorOff = 1;
-    }
-
-    // Apagar el motor por TiempoMotorOff
-    if ((currentMillis - previousMillis) >= TiempoMotorOff && MotorOff == 1) {
-      digitalWrite(7, LOW);  // Encender motor
-      previousMillis = currentMillis;
+      previousMillis = millis();
+      digitalWrite(7, LOW);   // Encender motor mezclador (LOW = ON)
+      EMezclador = 1;
       MotorOn = 1;
       MotorOff = 0;
     }
   }
 
-  // ========== DETENCIÓN DE PROCESO ==========
-  if ((activarMezcla == 0 && continuar == 0) || detener == 1) {
+  // ========== CONTROL DE MEZCLADO (DURACIÓN Y CICLO ON/OFF) ==========
+  if (activarMezcla == 1) {
+    unsigned long currentMillis = millis();
+    unsigned long tiempoTranscurrido = currentMillis - TInicioMezclado;
+
+    // Default mínimo si se solicitó mezclar sin cargar tiempo (1 min)
+    if (duracionMezclaMs == 0) {
+      duracionMezclaMs = 60000UL;
+    }
+
+    // Verificar si se completó el tiempo de mezcla de la receta
+    if (tiempoTranscurrido >= duracionMezclaMs) {
+      digitalWrite(7, HIGH);  // Apagar motor mezclador (HIGH = OFF)
+      EMezclador = 0;
+      activarMezcla = 0;
+      continuar = 0;
+      EProceso = 2;           // Estado 2 = Mezcla finalizada (listo para vaciado)
+      horaRest = 0;
+      minRest = 0;
+      MotorOn = 1;
+      MotorOff = 0;
+    } else {
+      EProceso = 1;           // Estado 1 = Proceso en ejecución
+      
+      // Calcular retroalimentación de tiempo restante (horas y minutos)
+      unsigned long tiempoRestanteMs = duracionMezclaMs - tiempoTranscurrido;
+      horaRest = (int)(tiempoRestanteMs / 3600000UL);
+      minRest = (int)((tiempoRestanteMs % 3600000UL) / 60000UL);
+      if (minRest == 0 && horaRest == 0 && tiempoRestanteMs > 1000UL) {
+        minRest = 1;  // Mostrar 1 min mientras queden segundos del último minuto
+      }
+
+      // Ciclo intermitente: 5s encendido (LOW) / 2s apagado (HIGH)
+      if (MotorOn == 1 && (currentMillis - previousMillis) >= TiempoMotorOn) {
+        digitalWrite(7, HIGH);  // Apagar motor
+        EMezclador = 0;
+        previousMillis = currentMillis;
+        MotorOn = 0;
+        MotorOff = 1;
+      }
+      else if (MotorOff == 1 && (currentMillis - previousMillis) >= TiempoMotorOff) {
+        digitalWrite(7, LOW);   // Encender motor
+        EMezclador = 1;
+        previousMillis = currentMillis;
+        MotorOn = 1;
+        MotorOff = 0;
+      }
+    }
+  }
+
+  // Si no está en ejecución ni mezcla, resetear tiempo restante
+  if (continuar == 0 && activarMezcla == 0) {
+    horaRest = 0;
+    minRest = 0;
+  }
+
+  // ========== COMANDO DETENER (PARAR TODO: MEZCLA Y VACIADO) ==========
+  if (detener == 1) {
+    activarMezcla = 0;
+    continuar = 0;
+    vaciar = 0;
+    desechar = 0;
     EProceso = 0;
-    digitalWrite(7, HIGH);  // Apagar motor mezclador
-    digitalWrite(5, HIGH);  // Apagar bomba Bombo 1
-    digitalWrite(6, HIGH);  // Apagar bomba Bombo 2
-    digitalWrite(4, HIGH);  // Apagar bomba mezcla
+    horaRest = 0;
+    minRest = 0;
+    
+    // Apagar todos los actuadores (HIGH = OFF)
+    digitalWrite(7, HIGH);  // Apagar motor mezclador (Pin 7)
+    digitalWrite(5, HIGH);  // Apagar bomba depósito 1 (Pin 5)
+    digitalWrite(6, HIGH);  // Apagar bomba depósito 2 (Pin 6)
+    digitalWrite(4, HIGH);  // Apagar bomba depósito mezcla / vaciado (Pin 4)
+    
     EBomba1 = 0;
     EBomba2 = 0;
-    desechar = 0;
+    EMezclador = 0;
+    EBombaM = 0;
     detener = 0;
   }
 
-  // ========== DESECHAR PRODUCCIÓN ==========
-  if (desechar == 1) {
-    digitalWrite(4, LOW);  // Encender bomba del bombo de mezcla
+  // ========== VACIAR O DESECHAR BOMBO DE MEZCLA (PIN 4) ==========
+  if (vaciar == 1 || desechar == 1) {
+    // Apagar dosificación y mezclado por seguridad
+    digitalWrite(5, HIGH);  // Apagar bomba 1
+    digitalWrite(6, HIGH);  // Apagar bomba 2
+    digitalWrite(7, HIGH);  // Apagar mezclador
+    EBomba1 = 0;
+    EBomba2 = 0;
+    EMezclador = 0;
+    activarMezcla = 0;
+    continuar = 0;
+
+    // Encender bomba depósito mezcla (Pin 4, activo bajo: LOW = ON)
+    digitalWrite(4, LOW);
     EBombaM = 1;
+    EProceso = 4;  // Estado 4 = Vaciando / Desechando
+
+    // Limpieza de cantidades residuales
     liquido1 = 0;
     cantidad1 = 0;
     liquido2 = 0;
     cantidad2 = 0;
+    noInterrupts();
+    waterFlow1 = 0;
+    waterFlow2 = 0;
+    interrupts();
+
+    // Detener automáticamente cuando el bombo de mezcla esté vacío (< 15%)
+    if (constrainedPorcentaje3 < 15.0) {
+      digitalWrite(4, HIGH);  // Apagar bomba depósito mezcla (Pin 4)
+      EBombaM = 0;
+      vaciar = 0;
+      desechar = 0;
+      EProceso = 0;
+    }
   }
 
-  // ========== VACIAR BOMBO DE MEZCLA ==========
-  if (vaciar == 1) {
-    if (EProceso == 2) {
-      digitalWrite(4, LOW);  // Encender bomba del bombo de mezcla
-      EBombaM = 1;
-      liquido1 = 0;
-      cantidad1 = 0;
-      liquido2 = 0;
-      cantidad2 = 0;
-    }
-
-    if (EProceso == 0 || EProceso == 1) {
-      digitalWrite(4, LOW);  // Encender bomba del bombo de mezcla
-      EBombaM = 1;
-      liquido1 = 0;
-      cantidad1 = 0;
-      liquido2 = 0;
-      cantidad2 = 0;
+  // ========== ESTADO EN ESPERA (REPOSO) ==========
+  if (activarMezcla == 0 && continuar == 0 && vaciar == 0 && desechar == 0) {
+    digitalWrite(5, HIGH);  // Bomba 1 OFF
+    digitalWrite(6, HIGH);  // Bomba 2 OFF
+    digitalWrite(7, HIGH);  // Mezclador OFF
+    digitalWrite(4, HIGH);  // Bomba mezcla OFF
+    EBomba1 = 0;
+    EBomba2 = 0;
+    EMezclador = 0;
+    EBombaM = 0;
+    if (EProceso != 2) {
+      EProceso = 0;
     }
   }
 }
@@ -714,7 +820,6 @@ void lectura() {
     if (valor == 'C') {
       g = 5;
       obtencionEntero();
-      continuar = 1;
     }
 
     if (valor == 'c') {
@@ -723,20 +828,33 @@ void lectura() {
     }
 
     if (valor == 'V') {
-      g = 7;
       vaciar = 1;
-      obtencionEntero();
+      desechar = 0;
+      activarMezcla = 0;
+      continuar = 0;
+      detener = 0;
     }
 
     if (valor == 'D') {
-      g = 8;
       activarMezcla = 0;
       continuar = 0;
+      vaciar = 0;
+      desechar = 0;
       detener = 1;
     }
 
     if (valor == 'A') {
       g = 10;
+      noInterrupts();
+      waterFlow1 = 0;
+      waterFlow2 = 0;
+      interrupts();
+      cantidad1 = 0;
+      cantidad2 = 0;
+      terminoLlenadoLiquido1 = 0;
+      terminoLlenadoLiquido2 = 0;
+      arranque2 = 0;
+      activarMezcla = 0;
       continuar = 1;
     }
 
@@ -756,6 +874,10 @@ void lectura() {
 
     if (valor == 'X') {
       desechar = 1;
+      vaciar = 0;
+      activarMezcla = 0;
+      continuar = 0;
+      detener = 0;
     }
   }
 }

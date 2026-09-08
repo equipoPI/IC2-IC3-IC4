@@ -295,11 +295,14 @@ class GatewayGUI:
             content += f"  • Porcentaje Bombo 2:.. {p2} %\n"
             content += f"  • Porcentaje Mezcla:... {pmz} %\n"
             
-            # Caudales
-            c1 = data.get('caudal_1', 'N/A')
-            c2 = data.get('caudal_2', 'N/A')
-            content += f"  • Caudal 1:............ {c1} L/min\n"
-            content += f"  • Caudal 2:............ {c2} L/min\n\n"
+            # Dosificación de Líquidos (Caudalímetros)
+            try:
+                c1 = float(data.get('caudal_1', 0.0))
+                c2 = float(data.get('caudal_2', 0.0))
+            except (ValueError, TypeError):
+                c1, c2 = 0.0, 0.0
+            content += f"  • Dosificación L1:.... {c1:.2f} L\n"
+            content += f"  • Dosificación L2:.... {c2:.2f} L\n\n"
             
             # Actuadores / Estados
             content += "⚙️ ESTADO DE ACTUADORES:\n"
@@ -321,13 +324,27 @@ class GatewayGUI:
             content += f"  • Válvula Rep. B:...... {v2}\n\n"
             
             # Proceso
-            hr = data.get('hora_restante', 0)
-            mr = data.get('min_restante', 0)
-            ep = data.get('estado_proceso', 0)
-            err = data.get('error', 0)
-            content += f"  • Tiempo Restante:..... {hr:02d}:{mr:02d}\n"
-            content += f"  • Estado Proceso:...... {ep}\n"
-            content += f"  • Código Error:........ {err}\n"
+            try:
+                hr = int(data.get('hora_restante', 0))
+                mr = int(data.get('min_restante', 0))
+                ep = int(data.get('estado_proceso', 0))
+                err = int(data.get('error', 0))
+            except (ValueError, TypeError):
+                hr, mr, ep, err = 0, 0, 0, 0
+
+            ep_names = {
+                0: "⚪ En Espera / Detenido",
+                1: "🟡 En Proceso (Transferencia/Mezclado)",
+                2: "🟢 Mezcla Finalizada (Listo p/ Vaciar)",
+                3: "⏸️ Pausado",
+                4: "🔵 Vaciando / Desechando"
+            }
+            ep_desc = ep_names.get(ep, str(ep))
+            err_desc = "🟢 Normal (0)" if err == 0 else f"⚠️ Error ({err})"
+
+            content += f"  • Tiempo Restante:..... {hr:02d}:{mr:02d} hs\n"
+            content += f"  • Estado Proceso:...... {ep_desc}\n"
+            content += f"  • Código Error:........ {err_desc}\n"
             
             # Timestamp
             hora = data.get('fecha_hora', '')
