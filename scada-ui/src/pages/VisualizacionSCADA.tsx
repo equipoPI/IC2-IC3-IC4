@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useScadaWebSocket } from "@/hooks/useScadaWebSocket";
+
 
 const VisualizacionSCADA = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -70,9 +72,6 @@ const VisualizacionSCADA = () => {
         tipo_sistema: formSistema.tipo_sistema,
         descripcion: formSistema.descripcion || ""
       };
-      if (formSistema.fabrica && formSistema.fabrica !== 'undefined' && formSistema.fabrica !== 'null' && !isNaN(Number(formSistema.fabrica))) {
-        payload.fabrica = Number(formSistema.fabrica);
-      }
 
       const resp = await apiFetch(`/api/v1/sistemas/${formSistema.id}/`, {
         method: "PATCH",
@@ -81,20 +80,21 @@ const VisualizacionSCADA = () => {
       });
       if (resp.ok) {
         const updated = await resp.json();
-        toast.success("✅ Sistema y tipo de proceso actualizados");
+        toast.success("✅ Sistema y tipo de proceso actualizados correctamente");
         setIsEditSistemaOpen(false);
         setSistemas(prev => prev.map(s => String(s.id) === String(formSistema.id) ? { ...s, ...updated } : s));
         setPanelsRefreshKey(k => k + 1);
         await loadFiltros();
       } else {
         const errData = await resp.json().catch(() => ({}));
-        const msg = typeof errData === 'object' ? JSON.stringify(errData) : 'Error al actualizar el sistema';
-        toast.error(`❌ ${msg}`);
+        const detail = errData.detail || (typeof errData === 'object' ? Object.entries(errData).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`).join(" | ") : String(errData));
+        toast.error(`❌ ${detail || 'Error al actualizar el sistema'}`);
       }
     } catch (e) {
       toast.error("Fallo de red al guardar el sistema");
     }
   };
+
 
   const openDinamicoModal = (tipo: string, nombre: string) => {
     setDinamicoTipoSistema(tipo);
@@ -262,12 +262,23 @@ const VisualizacionSCADA = () => {
     }
   };
 
+  const { isConnected: isWsConnected } = useScadaWebSocket({
+    onMessage: (data) => {
+      console.log("[VisualizacionSCADA] Evento WebSocket recibido:", data);
+      loadDispositivos();
+      if (selectedSistema !== 'seleccionar') {
+        loadUltimaTransmision();
+      }
+    }
+  });
+
   useEffect(() => {
     loadDispositivos();
     loadFiltros();
     loadMqttConfig();
     fetchCustomComandos();
   }, []);
+
 
   useEffect(() => {
     if (selectedSistema !== 'seleccionar') {
@@ -508,13 +519,38 @@ const VisualizacionSCADA = () => {
                   Ubicación: {currentViewLabel}
                 </Badge>
 
-                {selectedSistema !== 'seleccionar' && selectedSistema !== 'todas' && (
-                  <Badge variant="outline" className="text-xs font-mono bg-cyan-950/40 text-cyan-300 border-cyan-800/80 gap-1.5">
-                    <Cpu className="h-3 w-3 text-cyan-400" />
-                    Gateway: <span className="font-bold text-cyan-200">d83add60dbb0</span>
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" title="Gateway Online"></span>
-                  </Badge>
+                <Badge variant="outline" className={cn("text-xs font-mono gap-1.5 transition-colors", isWsConnected ? "bg-emerald-950/40 text-emerald-300 border-emerald-800/80" : "bg-amber-950/40 text-amber-300 border-amber-800/80")}>
+                  <Zap className={cn("h-3 w-3", isWsConnected ? "text-emerald-400" : "text-amber-400")} />
+                  WebSocket: <span className="font-bold">{isWsConnected ? "Conectado" : "Reconectando..."}</span>
+                  <span className={cn("w-2 h-2 rounded-full ml-0.5", isWsConnected ? "bg-emerald-400 animate-pulse" : "bg-amber-400 animate-ping")} title={isWsConnected ? "WS Push Activo (<20ms)" : "WS Reconectando"}></span>
+                </Badge>
+
+                {selectedSistema !== 'seleccionar' && selectedSistema !== 'todas' && selectedSistemaObj && (
+                  <>
+                    <Badge variant="outline" className={cn(
+                      "text-xs font-mono gap-1.5 border transition-colors",
+                      (selectedSistemaObj.tipo_sistema || 'FLUIDOS').toUpperCase().includes('FLUID') ? "bg-cyan-950/40 text-cyan-300 border-cyan-800/80" :
+                      (selectedSistemaObj.tipo_sistema || '').toUpperCase().includes('SOLID') ? "bg-amber-950/40 text-amber-300 border-amber-800/80" :
+                      (selectedSistemaObj.tipo_sistema || '').toUpperCase().includes('EMPAQ') ? "bg-purple-950/40 text-purple-300 border-purple-800/80" :
+                      (selectedSistemaObj.tipo_sistema || '').toUpperCase().includes('TEMP') ? "bg-rose-950/40 text-rose-300 border-rose-800/80" :
+                      "bg-indigo-950/40 text-indigo-300 border-indigo-800/80"
+                    )}>
+                      {(selectedSistemaObj.tipo_sistema || 'FLUIDOS').toUpperCase().includes('FLUID') ? <Droplet className="h-3 w-3 text-cyan-400" /> :
+                       (selectedSistemaObj.tipo_sistema || '').toUpperCase().includes('SOLID') ? <Layers className="h-3 w-3 text-amber-400" /> :
+                       (selectedSistemaObj.tipo_sistema || '').toUpperCase().includes('EMPAQ') ? <PackageCheck className="h-3 w-3 text-purple-400" /> :
+                       (selectedSistemaObj.tipo_sistema || '').toUpperCase().includes('TEMP') ? <Thermometer className="h-3 w-3 text-rose-400" /> :
+                       <Layers className="h-3 w-3 text-indigo-400" />}
+                      Tipo: <span className="font-bold uppercase tracking-wider">{selectedSistemaObj.tipo_sistema || selectedSistemaObj.tipo || 'FLUIDOS'}</span>
+                    </Badge>
+
+                    <Badge variant="outline" className="text-xs font-mono bg-cyan-950/40 text-cyan-300 border-cyan-800/80 gap-1.5">
+                      <Cpu className="h-3 w-3 text-cyan-400" />
+                      Gateway: <span className="font-bold text-cyan-200">{selectedSistemaObj.gateway_id || 'd83add60dbb0'}</span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" title="Gateway Online"></span>
+                    </Badge>
+                  </>
                 )}
+
               </div>
             </div>
 

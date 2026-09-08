@@ -22,6 +22,8 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import apiFetch from '@/lib/api';
 import { Save, RotateCcw, BoxSelect, Cpu, Layers, AlertCircle } from 'lucide-react';
+import { useScadaWebSocket } from '@/hooks/useScadaWebSocket';
+
 
 const nodeTypes = {
   tank: TankNode,
@@ -100,15 +102,25 @@ const ScadaFlowDiagram = ({
     }
   };
 
+  useScadaWebSocket({
+    onMessage: () => {
+      if (document.visibilityState === 'visible' && selectedSistema !== 'seleccionar') {
+        loadData();
+      }
+    }
+  });
+
   useEffect(() => {
     loadData();
+    // Fallback secundario de respaldo cada 15s en caso de microcorte WS
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible' && selectedSistema !== 'seleccionar') {
         loadData();
       }
-    }, 1000);
+    }, 15000);
     return () => clearInterval(interval);
   }, [selectedSistema]);
+
 
   // Filter dispositivos based strictly on selected planta, sección, and sistema
   const filteredDispositivos = useMemo(() => {
