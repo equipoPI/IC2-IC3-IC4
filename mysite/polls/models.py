@@ -131,11 +131,25 @@ class Empleado(models.Model):
                 )
         super().save(*args, **kwargs)
 
-        # Sincronizar estado laboral con el acceso al sistema (User.is_active)
+        # Sincronizar estado laboral con el acceso al sistema (User.is_active e is_staff)
         if self.user:
             is_active = (self.estado == 'ACTIVO')
+            is_admin_rango = (str(self.rango) == '8')
+            changed = False
+
             if self.user.is_active != is_active:
                 self.user.is_active = is_active
+                changed = True
+
+            if not self.user.is_superuser:
+                if is_admin_rango and not self.user.is_staff:
+                    self.user.is_staff = True
+                    changed = True
+                elif not is_admin_rango and self.user.is_staff:
+                    self.user.is_staff = False
+                    changed = True
+
+            if changed:
                 self.user.save()
 
     @property

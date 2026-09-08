@@ -200,29 +200,31 @@ class ProfileSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer(read_only=True)
     empleado = serializers.SerializerMethodField(read_only=True)
-    password = serializers.CharField(write_only=True, required=True)
+    password = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'password', 'is_active', 'is_superuser', 'profile', 'empleado']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'password', 'is_active', 'is_staff', 'is_superuser', 'profile', 'empleado']
         extra_kwargs = {'is_active': {'read_only': True}}
 
     def get_empleado(self, obj):
         try:
             emp = getattr(obj, 'empleado', None)
             if emp:
+                doc = str(getattr(emp, 'documento', ''))
                 return {
-                    'id': emp.id,
-                    'rango': emp.rango,
-                    'fabrica': emp.fabrica.id if getattr(emp, 'fabrica', None) else None,
-                    'seccion': emp.seccion.id if getattr(emp, 'seccion', None) else None,
+                    'id': doc,
+                    'documento': doc,
+                    'rango': str(getattr(emp, 'rango', '1')),
+                    'fabrica': emp.fabrica_id if getattr(emp, 'fabrica_id', None) else (emp.fabrica.id if getattr(emp, 'fabrica', None) else None),
+                    'seccion': emp.seccion_id if getattr(emp, 'seccion_id', None) else (emp.seccion.id if getattr(emp, 'seccion', None) else None),
                 }
         except Exception:
             pass
         return None
 
     def create(self, validated_data):
-        password = validated_data.pop('password')
+        password = validated_data.pop('password', None)
         username = validated_data.get('username')
         email = validated_data.get('email')
         # Crear usuario inactivo por defecto; se activará tras confirmación por email
@@ -230,7 +232,8 @@ class UserSerializer(serializers.ModelSerializer):
         user.username = username
         user.email = email
         user.is_active = False
-        user.set_password(password)
+        if password:
+            user.set_password(password)
         user.save()
         return user
 

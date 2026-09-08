@@ -34,7 +34,7 @@ export const deriveRol = (u: any): RolUsuario => {
     if (rango) {
       const r = String(rango);
       if (r === '8') return 'Administrador';
-      if (['3', '4', '5', '6', '7'].includes(r)) return 'Jefe de Sector';
+      if (['1', '2', '3', '4'].includes(r)) return 'Jefe de Sector';
       return 'Operador';
     }
     const role = u?.profile?.role || u?.rol || '';

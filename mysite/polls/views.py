@@ -35,7 +35,7 @@ from .serializers import (
     IngredienteAlmacenamientoSerializer, MantenimientoProgramadoSerializer, UnidadAlmacenamientoSerializer,
     HistorialProduccionSerializerBasic, ComunicacionMQTTSerializer, UserSerializer, ProfileSerializer
 )
-from .permissions import CanManageEmployees, IsAdminUserOrReadOnly, CanAccessSystemConfig
+from .permissions import CanManageEmployees, IsAdminUserOrReadOnly, CanAccessSystemConfig, CanViewAudit
 
 
 
@@ -142,7 +142,7 @@ class UserViewSet(viewsets.ModelViewSet):
     """Exponer usuarios (solo admins pueden listar/editar)."""
     queryset = User.objects.all().order_by('username')
     serializer_class = UserSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [CanAccessSystemConfig]
 
 
 class ProfileViewSet(viewsets.ModelViewSet):
@@ -707,12 +707,11 @@ class RegistroAuditoriaViewSet(viewsets.ModelViewSet):
         return queryset
     
     def get_permissions(self):
-        from rest_framework.permissions import IsAdminUser
         # Crear: cualquier usuario autenticado puede reportar una acción.
         if self.action in ['create']:
             return [IsAuthenticated()]
-        # List/retrieve: solo administradores
-        return [IsAdminUser()]
+        # List/retrieve: administradores y rangos autorizados de gestión
+        return [IsAuthenticated(), CanViewAudit()]
 
 
 class SistemaViewSet(viewsets.ModelViewSet):

@@ -96,16 +96,16 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const rangoNum = Number(usuario?.rango || (isAdmin ? 8 : 1));
 
   const isPathAllowed = (path: string) => {
-    if (rangoNum === 8) return true; // Administrador - Acceso total
-    if (rangoNum === 7 || rangoNum === 6) { // Director / Gerente
+    if (rangoNum === 8 || isAdmin) return true; // Administrador - Acceso total
+    if ([1, 2, 3, 4].includes(rangoNum)) { // Director, Gerente, Jefe de Sección, Coordinador
       const blocked = ['/plantas', '/secciones', '/sensores', '/almacenamiento', '/credenciales', '/comunicacion'];
       return !blocked.includes(path);
     }
-    if (rangoNum === 5 || rangoNum === 4 || rangoNum === 3) { // Jefe / Especialista / Coordinador
-      const blocked = ['/plantas', '/secciones', '/credenciales', '/comunicacion'];
+    if (rangoNum === 5) { // Especialista
+      const blocked = ['/empleados', '/plantas', '/secciones', '/sensores', '/almacenamiento', '/auditoria', '/credenciales', '/comunicacion'];
       return !blocked.includes(path);
     }
-    // Rangos 2 y 1: Empleado / Pasante (Operativos)
+    // Rangos 6 y 7 (Empleado, Pasante)
     const blocked = ['/empleados', '/plantas', '/secciones', '/sensores', '/almacenamiento', '/plantillas', '/auditoria', '/credenciales', '/comunicacion'];
     return !blocked.includes(path);
   };

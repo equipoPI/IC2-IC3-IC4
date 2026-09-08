@@ -38,18 +38,19 @@ const ProtectedPage = ({ path, element }: { path: string; element: JSX.Element }
   const rangoNum = Number(usuario?.rango || (isAdmin ? 8 : 1));
 
   if (rangoNum === 8 || isAdmin) return element;
-  if (rangoNum === 7 || rangoNum === 6) {
+  if ([1, 2, 3, 4].includes(rangoNum)) { // Director, Gerente, Jefe de Sección, Coordinador
     if (['/plantas', '/secciones', '/sensores', '/almacenamiento', '/credenciales', '/comunicacion'].includes(path)) {
       return <Navigate to="/dashboard" replace />;
     }
     return element;
   }
-  if (rangoNum === 5 || rangoNum === 4 || rangoNum === 3) {
-    if (['/plantas', '/secciones', '/credenciales', '/comunicacion'].includes(path)) {
+  if (rangoNum === 5) { // Especialista
+    if (['/empleados', '/plantas', '/secciones', '/sensores', '/almacenamiento', '/auditoria', '/credenciales', '/comunicacion'].includes(path)) {
       return <Navigate to="/dashboard" replace />;
     }
     return element;
   }
+  // Rangos 6 y 7 (Empleado, Pasante)
   if (['/empleados', '/plantas', '/secciones', '/sensores', '/almacenamiento', '/plantillas', '/auditoria', '/credenciales', '/comunicacion'].includes(path)) {
     return <Navigate to="/dashboard" replace />;
   }
