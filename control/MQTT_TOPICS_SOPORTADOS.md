@@ -3,7 +3,7 @@
 ## Configuración del Gateway
 
 ```yaml
-Broker: 192.168.137.1:1883
+Broker: 100.69.41.46:1883
 Tenant: Rafaela_S.A
 Gateway ID: d83add60dbb0
 Sector (default): A1
@@ -222,20 +222,20 @@ Estructura: `Rafaela_S.A/d83add60dbb0/{sector}/{sistema}/actuadores/{tipo}`
 
 ### Enviar comando de mezcla (mosquitto_pub)
 ```bash
-mosquitto_pub -h 192.168.137.1 -u admin -P admin \
+mosquitto_pub -h 100.69.41.46 -u admin -P admin \
   -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/mezcla" \
   -m '{"liquido_1": 50, "liquido_2": 30, "hora": 0, "minuto": 15}'
 ```
 
 ### Suscribirse a todas las respuestas (mosquitto_sub)
 ```bash
-mosquitto_sub -h 192.168.137.1 -u admin -P admin \
+mosquitto_sub -h 100.69.41.46 -u admin -P admin \
   -t "Rafaela_S.A/d83add60dbb0/resp/#"
 ```
 
 ### Suscribirse a todos los sensores
 ```bash
-mosquitto_sub -h 192.168.137.1 -u admin -P admin \
+mosquitto_sub -h 100.69.41.46 -u admin -P admin \
   -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/sensores/#"
 ```
 

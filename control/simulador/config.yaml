@@ -131,7 +131,7 @@ logging:
       file: ./logs/serial.log
       level: DEBUG
 mqtt:
-  broker: 192.168.137.1
+  broker: 100.69.41.46
   client_id: ''
   default_sector: A1
   default_system: linea_mezclado_1

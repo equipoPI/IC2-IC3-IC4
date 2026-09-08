@@ -93,24 +93,28 @@ class SimuladorGUI:
         self.sim_thread.start()
 
     def load_config_defaults(self):
-        self.host_var = tk.StringVar(value="localhost")
+        self.host_var = tk.StringVar(value="100.69.41.46")
         self.port_var = tk.IntVar(value=1883)
         self.user_var = tk.StringVar(value="admin")
         self.pass_var = tk.StringVar(value="admin")
         self.tenant_var = tk.StringVar(value="rafaela_sa")
         self.gateway_mac_var = tk.StringVar(value="d83add60dbb0") # Editable libremente
+        self.sector_var = tk.StringVar(value="A1")
+        self.sistema_var = tk.StringVar(value="linea_mezclado_1")
 
         if self.config_path.exists():
             try:
                 with open(self.config_path, "r", encoding="utf-8") as f:
                     cfg = yaml.safe_load(f)
                     m = cfg.get("mqtt", {})
-                    self.host_var.set(m.get("broker", "localhost"))
+                    self.host_var.set(m.get("broker", "100.69.41.46"))
                     self.port_var.set(m.get("port", 1883))
                     self.user_var.set(m.get("username", "admin"))
                     self.pass_var.set(m.get("password", "admin"))
                     self.tenant_var.set(m.get("tenant", "rafaela_sa"))
                     self.gateway_mac_var.set(m.get("gateway_id", "d83add60dbb0"))
+                    self.sector_var.set(m.get("default_sector", "A1"))
+                    self.sistema_var.set(m.get("default_system", "linea_mezclado_1"))
             except Exception:
                 pass
 
@@ -123,7 +127,7 @@ class SimuladorGUI:
         lbl_title.pack(side="left")
         
         self.lbl_status_badge = tk.Label(
-            header_frame, text="🔴 DESCONECTADO", bg="#dc2626", fg="white", font=("Segoe UI", 9, "bold"), px=8, py=3
+            header_frame, text="🔴 DESCONECTADO", bg="#dc2626", fg="white", font=("Segoe UI", 9, "bold"), padx=8, pady=3
         )
         self.lbl_status_badge.pack(side="right")
         
@@ -147,81 +151,264 @@ class SimuladorGUI:
         self.build_tab_actuadores()
 
     def build_tab_conexion(self):
-        grid = ttk.LabelFrame(self.tab_conexion, text="Parámetros de Conexión MQTT & MAC Personalizable", padding=15)
-        grid.pack(fill="x", pady=5)
+        # Frame principal con panel lateral (izquierda) y monitor (derecha)
+        main_frame = ttk.Frame(self.tab_conexion)
+        main_frame.pack(fill="both", expand=True)
+        
+        # ===== PANEL LATERAL IZQUIERDO =====
+        left_panel = ttk.LabelFrame(main_frame, text="Panel Lateral", padding=10, width=300)
+        left_panel.pack(side="left", fill="both", expand=False, padx=(0, 5))
+        left_panel.pack_propagate(False)
+        
+        # --- SECCIÓN SUPERIOR: Configuración ---
+        config_frame = ttk.LabelFrame(left_panel, text="Configuración MQTT", padding=10)
+        config_frame.pack(fill="x", pady=(0, 10))
         
         # Broker Host
-        ttk.Label(grid, text="Broker MQTT (Host/IP):").grid(row=0, column=0, sticky="w", py=5)
-        ttk.Entry(grid, textvariable=self.host_var, width=25).grid(row=0, column=1, sticky="w", px=5)
+        ttk.Label(config_frame, text="Broker MQTT:", font=("Segoe UI", 9)).grid(row=0, column=0, sticky="w", pady=3)
+        ttk.Entry(config_frame, textvariable=self.host_var, width=20, font=("Segoe UI", 9)).grid(row=0, column=1, sticky="w", padx=3)
         
         # Puerto
-        ttk.Label(grid, text="Puerto MQTT:").grid(row=0, column=2, sticky="w", py=5, px=10)
-        ttk.Entry(grid, textvariable=self.port_var, width=10).grid(row=0, column=3, sticky="w", px=5)
+        ttk.Label(config_frame, text="Puerto:", font=("Segoe UI", 9)).grid(row=1, column=0, sticky="w", pady=3)
+        ttk.Entry(config_frame, textvariable=self.port_var, width=20, font=("Segoe UI", 9)).grid(row=1, column=1, sticky="w", padx=3)
         
         # Usuario
-        ttk.Label(grid, text="Usuario MQTT:").grid(row=1, column=0, sticky="w", py=5)
-        ttk.Entry(grid, textvariable=self.user_var, width=25).grid(row=1, column=1, sticky="w", px=5)
+        ttk.Label(config_frame, text="Usuario:", font=("Segoe UI", 9)).grid(row=2, column=0, sticky="w", pady=3)
+        ttk.Entry(config_frame, textvariable=self.user_var, width=20, font=("Segoe UI", 9)).grid(row=2, column=1, sticky="w", padx=3)
         
         # Contraseña
-        ttk.Label(grid, text="Contraseña:").grid(row=1, column=2, sticky="w", py=5, px=10)
-        ttk.Entry(grid, textvariable=self.pass_var, show="*", width=15).grid(row=1, column=3, sticky="w", px=5)
+        ttk.Label(config_frame, text="Contraseña:", font=("Segoe UI", 9)).grid(row=3, column=0, sticky="w", pady=3)
+        ttk.Entry(config_frame, textvariable=self.pass_var, show="*", width=20, font=("Segoe UI", 9)).grid(row=3, column=1, sticky="w", padx=3)
         
         # Tenant
-        ttk.Label(grid, text="Tenant / Fábrica:").grid(row=2, column=0, sticky="w", py=5)
-        ttk.Entry(grid, textvariable=self.tenant_var, width=25).grid(row=2, column=1, sticky="w", px=5)
+        ttk.Label(config_frame, text="Tenant:", font=("Segoe UI", 9)).grid(row=4, column=0, sticky="w", pady=3)
+        ttk.Entry(config_frame, textvariable=self.tenant_var, width=20, font=("Segoe UI", 9)).grid(row=4, column=1, sticky="w", padx=3)
         
-        # MAC / Gateway ID Personalizable
-        ttk.Label(grid, text="Gateway ID / Dirección MAC (Editable):", font=("Segoe UI", 9, "bold")).grid(row=2, column=2, sticky="w", py=5, px=10)
-        ttk.Entry(grid, textvariable=self.gateway_mac_var, width=25, font=("Consolas", 10, "bold")).grid(row=2, column=3, sticky="w", px=5)
+        # Gateway ID
+        ttk.Label(config_frame, text="Gateway ID:", font=("Segoe UI", 9, "bold")).grid(row=5, column=0, sticky="w", pady=3)
+        ttk.Entry(config_frame, textvariable=self.gateway_mac_var, width=20, font=("Consolas", 9, "bold")).grid(row=5, column=1, sticky="w", padx=3)
         
-        # Botones de Acción de Conexión
-        btn_frame = ttk.Frame(self.tab_conexion, padding=10)
-        btn_frame.pack(fill="x", pady=10)
+        # Sector
+        ttk.Label(config_frame, text="Sector:", font=("Segoe UI", 9)).grid(row=6, column=0, sticky="w", pady=3)
+        ttk.Entry(config_frame, textvariable=self.sector_var, width=20, font=("Segoe UI", 9)).grid(row=6, column=1, sticky="w", padx=3)
+        
+        # Sistema
+        ttk.Label(config_frame, text="Sistema:", font=("Segoe UI", 9, "bold")).grid(row=7, column=0, sticky="w", pady=3)
+        ttk.Entry(config_frame, textvariable=self.sistema_var, width=20, font=("Segoe UI", 9)).grid(row=7, column=1, sticky="w", padx=3)
+        
+        # Botones de Control
+        btn_frame1 = ttk.Frame(config_frame)
+        btn_frame1.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(10, 0))
         
         self.btn_connect = tk.Button(
-            btn_frame, text="▶ Conectar al Broker MQTT", bg="#16a34a", fg="white", font=("Segoe UI", 10, "bold"),
-            command=self.toggle_connection, px=15, py=6
+            btn_frame1, text="▶ Conectar", bg="#16a34a", fg="white", font=("Segoe UI", 9, "bold"),
+            command=self.toggle_connection, width=11
         )
-        self.btn_connect.pack(side="left", px=5)
+        self.btn_connect.pack(side="left", padx=2)
         
-        self.btn_show_topics = tk.Button(
-            btn_frame, text="📋 Mostrar Tópicos Soportados", bg="#2563eb", fg="white", font=("Segoe UI", 10, "bold"),
-            command=self.mostrar_topicos_dialog, px=15, py=6
+        btn_refresh = tk.Button(
+            btn_frame1, text="🔄 Actualizar", bg="#3b82f6", fg="white", font=("Segoe UI", 9, "bold"),
+            command=self._refresh_tab_conexion, width=11
         )
-        self.btn_show_topics.pack(side="left", px=10)
+        btn_refresh.pack(side="left", padx=2)
         
-        # Info estructural
-        info_frame = ttk.LabelFrame(self.tab_conexion, text="Estructura de Tópicos Generada", padding=15)
-        info_frame.pack(fill="both", expand=True, pady=10)
+        # Botones de alternancia Datos/Tópicos
+        ttk.Label(config_frame, text="Mostrar:", font=("Segoe UI", 9, "bold")).grid(row=9, column=0, sticky="w", pady=(10, 3))
         
-        txt_topics = (
-            "Los datos de telemetría y comandos se transmiten mediante la arquitectura de 5 niveles:\n\n"
-            "• Telemetría: {tenant}/{gateway_id}/{seccion}/{sistema}/{categoria}/{dispositivo}\n"
-            "• Tópico Acción Directo: {tenant}/{gateway_id}/{seccion}/{sistema}/reposicion\n"
-            "• Tópico Acción General: {tenant}/{gateway_id}/{seccion}/{sistema}/accion\n"
-            "• Tópico Cmd Gateway: {tenant}/{gateway_id}/cmd/reposicion\n"
-            "• Tópico Cmd Dispositivo: {tenant}/{gateway_id}/cmd/{numero_serie}\n"
-            "• Tópico Legacy: scada/planta1/comandos/{accion}\n\n"
-            "Pulsa el botón '📋 Mostrar Tópicos Soportados' para ver todos los formatos con los valores actuales."
+        btn_frame2 = ttk.Frame(config_frame)
+        btn_frame2.grid(row=10, column=0, columnspan=2, sticky="ew")
+        
+        self.btn_show_datos = tk.Button(
+            btn_frame2, text="📊 Datos", bg="#9333ea", fg="white", font=("Segoe UI", 9, "bold"),
+            command=self._show_datos_conexion, width=12
         )
-        ttk.Label(info_frame, text=txt_topics, justify="left", font=("Segoe UI", 9)).pack(anchor="w")
+        self.btn_show_datos.pack(side="left", padx=2)
+        
+        self.btn_show_topics_conexion = tk.Button(
+            btn_frame2, text="📋 Tópicos", bg="#2563eb", fg="white", font=("Segoe UI", 9, "bold"),
+            command=self._show_topics_conexion, width=12
+        )
+        self.btn_show_topics_conexion.pack(side="left", padx=2)
+        
+        # --- SECCIÓN INFERIOR: Área de visualización (SIEMPRE DESPLEGADA) ---
+        display_frame = ttk.LabelFrame(left_panel, text="Información", padding=10)
+        display_frame.pack(fill="both", expand=True, pady=(10, 0))
+        
+        # ScrolledText para mostrar contenido
+        self.display_text = scrolledtext.ScrolledText(
+            display_frame, height=20, width=35, font=("Consolas", 8),
+            bg="#1e293b", fg="#e2e8f0", wrap="word", relief="solid", borderwidth=1
+        )
+        self.display_text.pack(fill="both", expand=True)
+        self.display_text.config(state="disabled")
+        
+        # ===== PANEL DERECHO: Monitor General =====
+        right_panel = ttk.LabelFrame(main_frame, text="Monitor Principal", padding=10)
+        right_panel.pack(side="right", fill="both", expand=True, padx=(5, 0))
+        
+        ttk.Label(right_panel, text="Información del Sistema", font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=5)
+        
+        self.info_conexion = scrolledtext.ScrolledText(
+            right_panel, height=25, width=45, font=("Consolas", 8),
+            bg="#1e293b", fg="#e2e8f0", wrap="word", relief="solid", borderwidth=1
+        )
+        self.info_conexion.pack(fill="both", expand=True)
+        self.info_conexion.config(state="disabled")
+        
+        # Mostrar datos inicialmente
+        self._show_datos_conexion()
+
+    def _show_datos_conexion(self):
+        """Muestra datos y estado en el panel"""
+        self.btn_show_datos.config(bg="#a855f7", relief="sunken")
+        self.btn_show_topics_conexion.config(bg="#2563eb", relief="raised")
+        self._refresh_tab_conexion()
+    
+    def _show_topics_conexion(self):
+        """Muestra tópicos MQTT en el panel"""
+        self.btn_show_topics_conexion.config(bg="#0ea5e9", relief="sunken")
+        self.btn_show_datos.config(bg="#9333ea", relief="raised")
+        self._refresh_tab_conexion(show_topics=True)
+    
+    def _refresh_tab_conexion(self, show_topics=False):
+        """Actualiza el contenido del panel de visualización"""
+        self.display_text.config(state="normal")
+        self.display_text.delete(1.0, "end")
+        self.info_conexion.config(state="normal")
+        self.info_conexion.delete(1.0, "end")
+        
+        if show_topics:
+            self._display_topics_conexion()
+        else:
+            self._display_datos_conexion()
+        
+        self.display_text.config(state="disabled")
+        self.info_conexion.config(state="disabled")
+    
+    def _display_datos_conexion(self):
+        """Muestra datos y valores actuales"""
+        tenant = self.tenant_var.get() or "rafaela_sa"
+        gw = self.gateway_mac_var.get() or "d83add60dbb0"
+        sector = self.sector_var.get() or "A1"
+        sistema = self.sistema_var.get() or "linea_mezclado_1"
+        
+        content = "📊 DATOS ACTUALES\n"
+        content += "=" * 30 + "\n\n"
+        content += f"Temperatura: {self.val_temp.get():.1f} °C\n"
+        content += f"Presión: {self.val_presion.get():.2f} Bar\n"
+        content += f"Bombo 1: {self.val_bombo1.get():.1f} %\n"
+        content += f"Bombo 2: {self.val_bombo2.get():.1f} %\n"
+        content += f"Mezcla: {self.val_mezcla.get():.1f} %\n"
+        content += f"Caudal A: {self.val_caudal_a.get():.1f} L/m\n"
+        content += f"Caudal B: {self.val_caudal_b.get():.1f} L/m\n\n"
+        
+        content += "🌐 Conexión MQTT:\n"
+        content += f"Host: {self.host_var.get()}\n"
+        content += f"Puerto: {self.port_var.get()}\n"
+        content += f"Usuario: {self.user_var.get()}\n"
+        content += f"Tenant: {tenant}\n"
+        content += f"Gateway: {gw}\n"
+        content += f"Sector: {sector}\n"
+        content += f"Sistema: {sistema}\n"
+        content += f"Estado: {'🟢 ONLINE' if self.is_connected else '🔴 OFFLINE'}\n"
+        
+        self.display_text.insert("end", content)
+        
+        # Info panel
+        info = "🖥️ ESTADO DE ACTUADORES\n"
+        info += "=" * 30 + "\n\n"
+        for dev_id, estado in self.actuadores_estado.items():
+            status = "✓ ACTIVO" if estado else "✗ Inactivo"
+            info += f"{dev_id}: {status}\n"
+        
+        self.info_conexion.insert("end", info)
+    
+    def _display_topics_conexion(self):
+        """Muestra estructura de tópicos MQTT"""
+        tenant = self.tenant_var.get() or "rafaela_sa"
+        gw = self.gateway_mac_var.get() or "d83add60dbb0"
+        sector = self.sector_var.get() or "A1"
+        sistema = self.sistema_var.get() or "linea_mezclado_1"
+        
+        content = "📋 TÓPICOS MQTT\n"
+        content += "=" * 30 + "\n\n"
+        content += f"Gateway: {gw}\n"
+        content += f"Tenant: {tenant}\n"
+        content += f"Sector: {sector}\n"
+        content += f"Sistema: {sistema}\n\n"
+        
+        content += "📤 PUBLICACIÓN\n"
+        content += "(Telemetría):\n\n"
+        content += f"• {tenant}/{gw}/{sector}/\n"
+        content += f"  {sistema}/sensores/\n"
+        content += f"  nivel_bombo1\n\n"
+        content += f"• {tenant}/{gw}/{sector}/\n"
+        content += f"  {sistema}/sensores/\n"
+        content += f"  nivel_bombo2\n\n"
+        content += f"• {tenant}/{gw}/{sector}/\n"
+        content += f"  {sistema}/sensores/\n"
+        content += f"  nivel_mezcla\n"
+        
+        self.display_text.insert("end", content)
+        
+        # Info panel con recepción
+        info = "📥 RECEPCIÓN\n"
+        info += "(Comandos):\n\n"
+        info += f"• {tenant}/{gw}/{sector}/\n"
+        info += f"  {sistema}/reposicion\n\n"
+        info += f"• {tenant}/{gw}/{sector}/\n"
+        info += f"  {sistema}/\n"
+        info += f"  freno_reposicion\n\n"
+        info += f"• {tenant}/{gw}/{sector}/\n"
+        info += f"  {sistema}/detener\n\n"
+        info += f"• {tenant}/{gw}/{sector}/\n"
+        info += f"  {sistema}/reanudar\n\n"
+        info += f"• {tenant}/{gw}/{sector}/\n"
+        info += f"  {sistema}/vaciar\n\n"
+        info += f"• {tenant}/{gw}/{sector}/\n"
+        info += f"  {sistema}/desechar\n\n"
+        info += f"• {tenant}/{gw}/{sector}/\n"
+        info += f"  {sistema}/mezcla\n"
+        
+        self.info_conexion.insert("end", info)
 
     def mostrar_topicos_dialog(self):
         tenant = self.tenant_var.get() or "rafaela_sa"
         gw = self.gateway_mac_var.get() or "d83add60dbb0"
+        sector = self.sector_var.get() or "A1"
+        sistema = self.sistema_var.get() or "linea_mezclado_1"
         
         text_info = f"""==================================================
 TÓPICOS MQTT SOPORTADOS - SIMULADOR SCADA
 ==================================================
 Gateway ID / MAC Activo: {gw}
 Tenant / Empresa: {tenant}
+Sector: {sector}
+Sistema: {sistema}
 
 --------------------------------------------------
 1. TELEMETRÍA DE SENSORES Y ESTADO (Publicación)
 --------------------------------------------------
-• Nivel Bombo 1:        {tenant}/{gw}/a1/linea_mezclado_1/sensores/nivel_bombo1
-• Nivel Bombo 2:        {tenant}/{gw}/a1/linea_mezclado_1/sensores/nivel_bombo2
-• Nivel Mezcla:         {tenant}/{gw}/a1/linea_mezclado_1/sensores/nivel_mezcla
+• Nivel Bombo 1:        {tenant}/{gw}/{sector}/{sistema}/sensores/nivel_bombo1
+• Nivel Bombo 2:        {tenant}/{gw}/{sector}/{sistema}/sensores/nivel_bombo2
+• Nivel Mezcla:         {tenant}/{gw}/{sector}/{sistema}/sensores/nivel_mezcla
+• Caudales 1 y 2:       {tenant}/{gw}/{sector}/{sistema}/sensores/caudal_1
+• Estado de Actuadores: {tenant}/{gw}/{sector}/{sistema}/actuadores/<nombre>
+• Estado General:       {tenant}/{gw}/estado/general
+
+--------------------------------------------------
+2. ACCIONES Y REPOSICIÓN DESDE WEB SCADA (Suscripción)
+--------------------------------------------------
+✓ Formato 1 (Jerárquico 5 Niveles Directo):
+  {tenant}/{gw}/{sector}/{sistema}/reposicion
+  {tenant}/{gw}/{sector}/{sistema}/detener_mezcla
+
+✓ Formato 2 (Jerárquico 5 Niveles General):
+  {tenant}/{gw}/{sector}/{sistema}/accion
+  Payload JSON: {{"accion": "reposicion", "bombo": 1, "limite_porcentaje": 80}}
+
+✓ Formato 3 (Comando General de Gateway):
+  {tenant}/{gw}/cmd/reposicion
 • Caudales 1 y 2:       {tenant}/{gw}/a1/linea_mezclado_1/sensores/caudal_1
 • Estado de Actuadores: {tenant}/{gw}/a1/linea_mezclado_1/actuadores/<nombre>
 • Estado General:       {tenant}/{gw}/estado/general
@@ -268,17 +455,17 @@ Tenant / Empresa: {tenant}
         mode_frame = ttk.LabelFrame(self.tab_telemetria, text="Modo de Generación de Telemetría", padding=10)
         mode_frame.pack(fill="x", pady=5)
         
-        ttk.Radiobutton(mode_frame, text="🎛️ Control Manual por Sliders en Vivo", variable=self.modo_telemetria, value="manual").pack(side="left", px=15)
-        ttk.Radiobutton(mode_frame, text="🎲 Modo Sintético Aleatorio (Random)", variable=self.modo_telemetria, value="random").pack(side="left", px=15)
+        ttk.Radiobutton(mode_frame, text="🎛️ Control Manual por Sliders en Vivo", variable=self.modo_telemetria, value="manual").pack(side="left", padx=15)
+        ttk.Radiobutton(mode_frame, text="🎲 Modo Sintético Aleatorio (Random)", variable=self.modo_telemetria, value="random").pack(side="left", padx=15)
         
         # Sliders Frame
         sliders_frame = ttk.LabelFrame(self.tab_telemetria, text="Ajuste Manual de Variables y Sensores", padding=15)
         sliders_frame.pack(fill="both", expand=True, pady=5)
         
         # 1. Temperatura
-        ttk.Label(sliders_frame, text="Temperatura (°C):").grid(row=0, column=0, sticky="w", py=5)
+        ttk.Label(sliders_frame, text="Temperatura (°C):").grid(row=0, column=0, sticky="w", pady=5)
         s_temp = ttk.Scale(sliders_frame, from_=0.0, to=100.0, variable=self.val_temp, orient="horizontal", length=220)
-        s_temp.grid(row=0, column=1, px=10)
+        s_temp.grid(row=0, column=1, padx=10)
         ttk.Label(sliders_frame, textvariable=tk.StringVar(value=""), width=8).grid(row=0, column=2)
         lbl_v_temp = ttk.Label(sliders_frame, text="", font=("Consolas", 10, "bold"))
         lbl_v_temp.grid(row=0, column=2, sticky="w")
@@ -286,36 +473,36 @@ Tenant / Empresa: {tenant}
         lbl_v_temp.config(text=f"{self.val_temp.get():.1f} °C")
 
         # 2. Presión
-        ttk.Label(sliders_frame, text="Presión (Bar):").grid(row=1, column=0, sticky="w", py=5)
-        s_pres = ttk.Scale(sliders_frame, from_=0.0, to=10.0, variable=self.val_presion, orient="horizontal", length=220)
-        s_pres.grid(row=1, column=1, px=10)
+        ttk.Label(sliders_frame, text="Presión (Bar):").grid(row=1, column=0, sticky="w", pady=5)
+        s_pres = ttk.Scale(sliders_frame, from_=0.0, to=100.0, variable=self.val_presion, orient="horizontal", length=220)
+        s_pres.grid(row=1, column=1, padx=10)
         lbl_v_pres = ttk.Label(sliders_frame, text="", font=("Consolas", 10, "bold"))
         lbl_v_pres.grid(row=1, column=2, sticky="w")
         self.val_presion.trace_add("write", lambda *args: lbl_v_pres.config(text=f"{self.val_presion.get():.2f} Bar"))
         lbl_v_pres.config(text=f"{self.val_presion.get():.2f} Bar")
 
         # 3. Nivel Bombo 1
-        ttk.Label(sliders_frame, text="Nivel Bombo 1 (%):").grid(row=2, column=0, sticky="w", py=5)
+        ttk.Label(sliders_frame, text="Nivel Bombo 1 (%):").grid(row=2, column=0, sticky="w", pady=5)
         s_b1 = ttk.Scale(sliders_frame, from_=0.0, to=100.0, variable=self.val_bombo1, orient="horizontal", length=220)
-        s_b1.grid(row=2, column=1, px=10)
+        s_b1.grid(row=2, column=1, padx=10)
         lbl_v_b1 = ttk.Label(sliders_frame, text="", font=("Consolas", 10, "bold"))
         lbl_v_b1.grid(row=2, column=2, sticky="w")
         self.val_bombo1.trace_add("write", lambda *args: lbl_v_b1.config(text=f"{self.val_bombo1.get():.1f} %"))
         lbl_v_b1.config(text=f"{self.val_bombo1.get():.1f} %")
 
         # 4. Nivel Bombo 2
-        ttk.Label(sliders_frame, text="Nivel Bombo 2 (%):").grid(row=3, column=0, sticky="w", py=5)
+        ttk.Label(sliders_frame, text="Nivel Bombo 2 (%):").grid(row=3, column=0, sticky="w", pady=5)
         s_b2 = ttk.Scale(sliders_frame, from_=0.0, to=100.0, variable=self.val_bombo2, orient="horizontal", length=220)
-        s_b2.grid(row=3, column=1, px=10)
+        s_b2.grid(row=3, column=1, padx=10)
         lbl_v_b2 = ttk.Label(sliders_frame, text="", font=("Consolas", 10, "bold"))
         lbl_v_b2.grid(row=3, column=2, sticky="w")
         self.val_bombo2.trace_add("write", lambda *args: lbl_v_b2.config(text=f"{self.val_bombo2.get():.1f} %"))
         lbl_v_b2.config(text=f"{self.val_bombo2.get():.1f} %")
 
         # 5. Nivel Tanque Mezcla
-        ttk.Label(sliders_frame, text="Nivel Mezcla (%):").grid(row=4, column=0, sticky="w", py=5)
+        ttk.Label(sliders_frame, text="Nivel Mezcla (%):").grid(row=4, column=0, sticky="w", pady=5)
         s_mz = ttk.Scale(sliders_frame, from_=0.0, to=100.0, variable=self.val_mezcla, orient="horizontal", length=220)
-        s_mz.grid(row=4, column=1, px=10)
+        s_mz.grid(row=4, column=1, padx=10)
         lbl_v_mz = ttk.Label(sliders_frame, text="", font=("Consolas", 10, "bold"))
         lbl_v_mz.grid(row=4, column=2, sticky="w")
         self.val_mezcla.trace_add("write", lambda *args: lbl_v_mz.config(text=f"{self.val_mezcla.get():.1f} %"))
@@ -324,9 +511,9 @@ Tenant / Empresa: {tenant}
         # Botón de disparo manual
         btn_pub = tk.Button(
             self.tab_telemetria, text="⚡ Publicar Lecturas Ahora", bg="#2563eb", fg="white", font=("Segoe UI", 9, "bold"),
-            command=self.publicar_manual_ahora, px=12, py=4
+            command=self.publicar_manual_ahora, padx=12, pady=4
         )
-        btn_pub.pack(anchor="e", py=5)
+        btn_pub.pack(anchor="e", pady=5)
 
     def build_tab_actuadores(self):
         # Panel de Luces LED
@@ -350,14 +537,14 @@ Tenant / Empresa: {tenant}
         row = 0
         for dev_id, nombre in actuadores_info:
             item_f = ttk.Frame(grid_leds, padding=6)
-            item_f.grid(row=row, column=col, sticky="w", px=8, py=4)
+            item_f.grid(row=row, column=col, sticky="w", padx=8, pady=4)
             
             canvas = tk.Canvas(item_f, width=24, height=24, bg=self.root.cget("bg"), highlightthickness=0)
-            canvas.pack(side="left", px=4)
+            canvas.pack(side="left", padx=4)
             circle = canvas.create_oval(3, 3, 21, 21, fill="#6b7280", outline="#374151") # Gris por defecto (inactivo)
             
             lbl = ttk.Label(item_f, text=nombre, font=("Segoe UI", 9, "bold"))
-            lbl.pack(side="left", px=4)
+            lbl.pack(side="left", padx=4)
             
             self.led_canvas_map[dev_id] = canvas
             self.led_circle_map[dev_id] = circle
@@ -509,6 +696,8 @@ Tenant / Empresa: {tenant}
             
         tenant = self.tenant_var.get().strip() or "rafaela_sa"
         mac = self.gateway_mac_var.get().strip() or "d83add60dbb0"
+        sector = self.sector_var.get().strip() or "A1"
+        sistema = self.sistema_var.get().strip() or "linea_mezclado_1"
         modo = self.modo_telemetria.get()
         
         if modo == "random":
@@ -537,7 +726,7 @@ Tenant / Empresa: {tenant}
             c_b = self.val_caudal_b.get()
 
         # Publicar tópicos estándar
-        base = f"{tenant}/{mac}/a1/linea_mezclado_1"
+        base = f"{tenant}/{mac}/{sector}/{sistema}"
         
         # 1. Niveles de Bombos y Tanque Mezcla
         self.client.publish(f"{base}/nivel/sensor_nivel_bombo1", json.dumps({"value": b1, "estado": "ONLINE", "unidad": "%"}))
@@ -552,7 +741,14 @@ Tenant / Empresa: {tenant}
         self.client.publish(f"{base}/sensores/temperatura", json.dumps({"value": temp, "estado": "ONLINE", "unidad": "°C"}))
         self.client.publish(f"{base}/sensores/presion", json.dumps({"value": pres, "estado": "ONLINE", "unidad": "Bar"}))
 
-        # 4. Diagnóstico de Planta
+        # 4. Sensores con el formato estándar unificado
+        self.client.publish(f"{base}/sensores/nivel_bombo1", json.dumps({"valor": b1, "unidad": "%"}))
+        self.client.publish(f"{base}/sensores/nivel_bombo2", json.dumps({"valor": b2, "unidad": "%"}))
+        self.client.publish(f"{base}/sensores/nivel_mezcla", json.dumps({"valor": mz, "unidad": "%"}))
+        self.client.publish(f"{base}/sensores/caudal_1", json.dumps({"valor": c_a, "unidad": "L/min"}))
+        self.client.publish(f"{base}/sensores/caudal_2", json.dumps({"valor": c_b, "unidad": "L/min"}))
+
+        # 5. Diagnóstico de Planta
         self.client.publish(
             f"{tenant}/{mac}/estado/general",
             json.dumps({"estado": "OPERATIVO", "porcentaje_produccion": round(b1 * 0.5 + b2 * 0.5, 1), "temperatura_promedio": temp})
