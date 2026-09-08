@@ -39,3 +39,7 @@ django-cors-headers
 django-allauth>=0.53.0
 dj-rest-auth>=3.1.0
 requests>=2.28.0
+
+# WebSockets / Django Channels
+daphne>=4.0.0
+channels>=4.0.0

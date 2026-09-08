@@ -302,3 +302,30 @@ def audit_user_password_change(sender, instance, **kwargs):
                 )
         except Exception:
             pass
+
+
+# Notificaciones WebSocket en tiempo real para cambios en modelos SCADA
+def notify_scada_change(model_name):
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                'scada_telemetry',
+                {
+                    'type': 'scada_update',
+                    'data': {'event': 'model_change', 'model': model_name}
+                }
+            )
+    except Exception:
+        pass
+
+@receiver(post_save, sender=DispositivoSCADA)
+@receiver(post_save, sender=UnidadAlmacenamiento)
+@receiver(post_save, sender=Sistema)
+@receiver(post_delete, sender=DispositivoSCADA)
+@receiver(post_delete, sender=UnidadAlmacenamiento)
+@receiver(post_delete, sender=Sistema)
+def scada_model_changed(sender, instance, **kwargs):
+    notify_scada_change(sender.__name__)

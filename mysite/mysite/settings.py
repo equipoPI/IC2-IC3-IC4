@@ -43,6 +43,8 @@ USE_X_FORWARDED_PORT = True
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
+    'channels',
     'polls.apps.PollsConfig',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -95,6 +97,14 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'mysite.wsgi.application'
+ASGI_APPLICATION = 'mysite.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
+
 
 
 # Database

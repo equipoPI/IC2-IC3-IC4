@@ -11,6 +11,23 @@ from polls.models import DispositivoSCADA, LecturaSensor, Fabrica, Seccion, Conf
 
 logger = logging.getLogger(__name__)
 
+def broadcast_ws_update(payload_data):
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                'scada_telemetry',
+                {
+                    'type': 'scada_update',
+                    'data': payload_data
+                }
+            )
+    except Exception as e:
+        logger.debug(f"WS Broadcast error (non-fatal): {e}")
+
+
 def get_categoria_from_variable(variable):
     var = variable.lower()
     if 'temp' in var or 'temperatura' in var:
@@ -554,7 +571,9 @@ class Command(BaseCommand):
                         calidad='BUENA'
                     )
                 
-                # self.stdout.write(f"[Telemetría] {device} -> {valor_lectura} {get_unidad_from_variable(variable)}")
+                # Transmitir actualización vía WebSocket en tiempo real
+                broadcast_ws_update({'type': 'telemetry_update', 'topic': topic})
 
         except Exception as e:
             logger.error(f"Error procesando mensaje MQTT en el worker: {e}", exc_info=True)
+
