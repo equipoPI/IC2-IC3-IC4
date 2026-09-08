@@ -37,7 +37,7 @@ services:
       - .env.smtp
     environment:
       - DEBUG=1
-      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,backend,host.docker.internal,scada-system.duckdns.org,remarry-anyplace-appraiser.ngrok-free.dev,*.ngrok-free.dev,*.ngrok-free.app,*.ngrok.io
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,backend,host.docker.internal,100.69.41.46,100.125.119.27,scada-system.duckdns.org,remarry-anyplace-appraiser.ngrok-free.dev,*.ngrok-free.dev,*.ngrok-free.app,*.ngrok.io
       - FRONTEND_URL=${FRONTEND_URL:-https://remarry-anyplace-appraiser.ngrok-free.dev}
       - DB_HOST=db
       - DB_PORT=5432
