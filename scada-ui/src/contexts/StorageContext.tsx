@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import apiFetch from '@/lib/api';
+import { useScadaWebSocket } from '@/hooks/useScadaWebSocket';
+
 
 export interface StorageUnit {
   id: string;
@@ -129,15 +131,24 @@ export const StorageProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  useScadaWebSocket({
+    onMessage: () => {
+      if (document.visibilityState === 'visible') {
+        loadData();
+      }
+    }
+  });
+
   useEffect(() => {
     loadData();
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         loadData();
       }
-    }, 2000);
+    }, 15000);
     return () => clearInterval(interval);
   }, []);
+
 
   const updateStorageUnit = async (updatedUnit: StorageUnit): Promise<{ success: boolean; error?: string }> => {
     try {

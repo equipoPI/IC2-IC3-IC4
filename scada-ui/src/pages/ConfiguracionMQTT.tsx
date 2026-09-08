@@ -54,6 +54,8 @@ interface TopicMQTT {
 interface MapeoAccion {
   id: string | number;
   nombre: string;
+  sistema?: number | null;
+  sistema_nombre?: string;
   tipo_sistema: string;
   tipo_sistema_display?: string;
   nombre_accion: string;
@@ -68,6 +70,7 @@ const ConfiguracionMQTT = () => {
   const [conexiones, setConexiones] = useState<ConexionMQTT[]>([]);
   const [topics, setTopics] = useState<TopicMQTT[]>([]);
   const [mapeos, setMapeos] = useState<MapeoAccion[]>([]);
+  const [sistemas, setSistemas] = useState<any[]>([]);
   const [dialogConexion, setDialogConexion] = useState(false);
   const [dialogTopic, setDialogTopic] = useState(false);
   const [dialogMapeo, setDialogMapeo] = useState(false);
@@ -79,9 +82,10 @@ const ConfiguracionMQTT = () => {
   const [formTopic, setFormTopic] = useState({ configuracion: "", topic: "", tipo: "suscripcion" as "suscripcion" | "publicacion", tipoDato: "string", descripcion: "" });
   const [formMapeo, setFormMapeo] = useState({
     nombre: "",
+    sistema: "general",
     tipo_sistema: "FLUIDOS",
     nombre_accion: "reposicion",
-    plantilla_topico: "{planta}/{gateway}/{seccion}/{sistema}/accion",
+    plantilla_topico: "{tenant}/{gateway}/{seccion}/{sistema}/accion",
     plantilla_payload_json: '{"accion": "{accion}", "parametros": {}}'
   });
 
@@ -312,10 +316,17 @@ const ConfiguracionMQTT = () => {
 
   const fetchMapeos = async () => {
     try {
-      const res = await apiFetch("/api/v1/mapeos-acciones-mqtt/");
-      if (res.ok) {
-        const data = await res.json();
+      const [resM, resS] = await Promise.all([
+        apiFetch("/api/v1/mapeos-acciones-mqtt/"),
+        apiFetch("/api/v1/sistemas/"),
+      ]);
+      if (resM.ok) {
+        const data = await resM.json();
         setMapeos(Array.isArray(data) ? data : data.results || []);
+      }
+      if (resS.ok) {
+        const sData = await resS.json();
+        setSistemas(Array.isArray(sData) ? sData : sData.results || []);
       }
     } catch (e) {
       console.warn("No se pudieron cargar los mapeos de acciones MQTT:", e);
@@ -326,6 +337,7 @@ const ConfiguracionMQTT = () => {
     setEditingMapeo(null);
     setFormMapeo({
       nombre: "",
+      sistema: "general",
       tipo_sistema: "FLUIDOS",
       nombre_accion: "reposicion",
       plantilla_topico: "{tenant}/{gateway}/{seccion}/{sistema}/accion",
@@ -338,6 +350,7 @@ const ConfiguracionMQTT = () => {
     setEditingMapeo(m);
     setFormMapeo({
       nombre: m.nombre,
+      sistema: m.sistema ? String(m.sistema) : "general",
       tipo_sistema: m.tipo_sistema,
       nombre_accion: m.nombre_accion,
       plantilla_topico: m.plantilla_topico,
@@ -352,15 +365,24 @@ const ConfiguracionMQTT = () => {
       return;
     }
 
+    const payloadToSave: any = {
+      nombre: formMapeo.nombre,
+      sistema: formMapeo.sistema === "general" || !formMapeo.sistema ? null : Number(formMapeo.sistema),
+      tipo_sistema: formMapeo.tipo_sistema,
+      nombre_accion: formMapeo.nombre_accion,
+      plantilla_topico: formMapeo.plantilla_topico,
+      plantilla_payload_json: formMapeo.plantilla_payload_json,
+    };
+
     try {
       if (editingMapeo && editingMapeo.id) {
         const resp = await apiFetch(`/api/v1/mapeos-acciones-mqtt/${editingMapeo.id}/`, {
-          method: "PUT",
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formMapeo)
+          body: JSON.stringify(payloadToSave)
         });
         if (resp.ok) {
-          toast({ title: "Plantilla actualizada", description: "La plantilla de acción MQTT se actualizó correctamente" });
+          toast({ title: "Plantilla actualizada", description: "La plantilla de acción MQTT se actualizó correctamente en PostgreSQL" });
           fetchMapeos();
         } else {
           toast({ title: "Error", description: "No se pudo actualizar la plantilla", variant: "destructive" });
@@ -369,7 +391,7 @@ const ConfiguracionMQTT = () => {
         const resp = await apiFetch("/api/v1/mapeos-acciones-mqtt/", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formMapeo)
+          body: JSON.stringify(payloadToSave)
         });
         if (resp.ok) {
           toast({ title: "Plantilla creada", description: "La plantilla de acción MQTT fue guardada exitosamente" });
@@ -771,14 +793,28 @@ const ConfiguracionMQTT = () => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Código de Acción (Accion Payload)</Label>
-                <Input value={formMapeo.nombre_accion} onChange={(e) => setFormMapeo({...formMapeo, nombre_accion: e.target.value})} placeholder="reposicion" className="bg-background border-border" />
+                <Label>Sistema Asociado</Label>
+                <Select value={formMapeo.sistema} onValueChange={(v) => setFormMapeo({...formMapeo, sistema: v})}>
+                  <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Seleccionar sistema" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="general">🌐 Todos los sistemas (General)</SelectItem>
+                    {sistemas.map((sys) => (
+                      <SelectItem key={sys.id} value={String(sys.id)}>
+                        ⚙️ {sys.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="space-y-2">
+              <Label>Código de Acción / Sub-tópico</Label>
+              <Input value={formMapeo.nombre_accion} onChange={(e) => setFormMapeo({...formMapeo, nombre_accion: e.target.value})} placeholder="desechar, reposicion, vaciar" className="bg-background border-border" />
+            </div>
+            <div className="space-y-2">
               <Label>Plantilla Tópico MQTT</Label>
-              <Input value={formMapeo.plantilla_topico} onChange={(e) => setFormMapeo({...formMapeo, plantilla_topico: e.target.value})} placeholder="scada/{planta}/{gateway}/{seccion}/{sistema}/accion" className="bg-background border-border font-mono text-xs" />
-              <p className="text-[11px] text-muted-foreground">Variables soportadas: {`{planta}`}, {`{mac}`}, {`{gateway}`}, {`{seccion}`}, {`{sistema}`}</p>
+              <Input value={formMapeo.plantilla_topico} onChange={(e) => setFormMapeo({...formMapeo, plantilla_topico: e.target.value})} placeholder="{tenant}/{gateway}/{seccion}/{sistema}/{accion}" className="bg-background border-border font-mono text-xs text-cyan-300" />
+              <p className="text-[11px] text-muted-foreground">Variables soportadas: {`{tenant}`}, {`{gateway}`}, {`{seccion}`}, {`{sistema}`}, {`{accion}`}</p>
             </div>
             <div className="space-y-2">
               <Label>Payload Base (JSON)</Label>

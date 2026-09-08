@@ -24,7 +24,9 @@ import {
   Bell,
   ShieldAlert
 } from "lucide-react";
+import { useScadaWebSocket } from "@/hooks/useScadaWebSocket";
 import VistaMacroPlanta from "@/components/scada/VistaMacroPlanta";
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -464,32 +466,43 @@ const MonitorizacionSCADA = () => {
     }
   };
 
+  useScadaWebSocket({
+    onMessage: () => {
+      if (selectedDispositivoIdRef.current && modoConsultaRef.current === "live") {
+        loadLecturasSensor(selectedDispositivoIdRef.current);
+      }
+      if (activeTab === "plantas") {
+        loadPlantas();
+      }
+    }
+  });
+
   useEffect(() => {
     loadPlantas();
     loadEstructura();
 
-    // 1. Refresco liviano de telemetría cada 1s (solo en modo live)
+    // Refresco secundario de respaldo en segundo plano cada 15s
     const telemetryInterval = setInterval(() => {
       if (activeTab === "historico" && modoConsultaRef.current !== "live") {
-        return; // Pausa completa si está analizando gráficos históricos
+        return;
       }
       if (selectedDispositivoIdRef.current && modoConsultaRef.current === "live") {
         loadLecturasSensor(selectedDispositivoIdRef.current);
       }
-    }, 1000);
+    }, 15000);
 
-    // 2. Refresco pesado de estructura de plantas y secciones en segundo plano cada 15s (solo en pestaña "plantas")
     const heavyInterval = setInterval(() => {
       if (activeTab === "plantas") {
         loadPlantas();
       }
-    }, 15000);
+    }, 30000);
 
     return () => {
       clearInterval(telemetryInterval);
       clearInterval(heavyInterval);
     };
   }, [activeTab]);
+
 
   // Efecto para recargar datos cuando cambian los parámetros de fecha/modo
   useEffect(() => {
@@ -614,7 +627,8 @@ const MonitorizacionSCADA = () => {
     if (modoGrafica === "proporcional") {
       const result: any[] = [];
       const startTime = startDate.getTime();
-      const firstTime = new Date(sorted[0].timestamp).getTime();
+      const firstTime = sorted[0]?.timestamp ? new Date(sorted[0].timestamp).getTime() : 0;
+
 
       if (modoConsulta === "historico" && firstTime > startTime + 60 * 60 * 1000) {
         result.push({

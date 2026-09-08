@@ -216,8 +216,9 @@ const AdministracionAlmacenamiento = () => {
     }
 
     if (editingUnit) {
-      const res = await updateStorageUnit({ ...formData, id: editingUnit.id });
+      const res = await updateStorageUnit({ ...editingUnit, ...formData, id: editingUnit.id });
       if (res.success) {
+
         toast({ title: "Actualizado", description: "Unidad de almacenamiento actualizada correctamente" });
         setDialogOpen(false);
       } else {

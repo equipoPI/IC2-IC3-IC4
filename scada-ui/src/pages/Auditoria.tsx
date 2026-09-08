@@ -781,56 +781,10 @@ const Auditoria = () => {
           </DialogContent>
         </Dialog>
       )}
-
-      {/* Dialog para Crear Nueva Clave de Registro */}
-      <Dialog open={dialogNewRegKey} onOpenChange={setDialogNewRegKey}>
-        <DialogContent className="sm:max-w-md bg-card border-border">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Key className="h-5 w-5 text-primary" /> Crear Nueva Clave de Registro
-            </DialogTitle>
-            <DialogDescription>
-              Esta clave podrá ser utilizada por nuevos usuarios al momento de registrarse en la plataforma.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="reg-key-input">Clave de Registro</Label>
-              <Input
-                id="reg-key-input"
-                value={newRegKeyStr}
-                onChange={(e) => setNewRegKeyStr(e.target.value)}
-                placeholder="ej: SCADA_KEY_2026, 00admin00"
-                className="bg-background border-border font-mono font-bold"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogNewRegKey(false)}>Cancelar</Button>
-            <Button onClick={handleAddRegKey}>Crear Clave</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog Confirmar Eliminación Clave de Registro */}
-      <Dialog open={!!deleteRegKeyId} onOpenChange={(open) => !open && setDeleteRegKeyId(null)}>
-        <DialogContent className="sm:max-w-md bg-card border-border">
-          <DialogHeader>
-            <DialogTitle className="text-destructive font-bold flex items-center gap-2">
-              <Trash2 className="h-5 w-5" /> Confirmar Eliminación de Clave
-            </DialogTitle>
-            <DialogDescription>
-              ¿Estás seguro de que deseas eliminar esta clave de registro? Si es la única clave activa en el sistema, la acción será rechazada para mantener la seguridad.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setDeleteRegKeyId(null)}>Cancelar</Button>
-            <Button variant="destructive" onClick={executeDeleteRegKey}>Eliminar Clave</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
+
+
 
 export default Auditoria;
