@@ -1,28 +1,6 @@
-# Python
-__pycache__/
-*.py[cod]
-*.so
-
-# Virtual env
-venv/
-env/
-myenv/
-
-# Django
-*.log
-local_settings.py
-db.sqlite3
-
-# Tests and local scripts (ignored to avoid committing credentials or transient tests)
-mysite/scripts/test_*.py
-scripts/send_email_test.py
-
-# Local env file for SMTP credentials (keep out of VCS)
-.env.smtp
-
-# VSCode
-.vscode/
-# Python
+# ==============================================================================
+# 1. Python & Entornos Virtuales
+# ==============================================================================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -30,104 +8,100 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
+myenv/
 *.egg-info/
 dist/
 build/
-
-# Django
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-media/
-staticfiles/
-
-# Node
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# Docker
-.docker/
-
-data/*.db
-control/raspberry_gateway/data/*.db
-# Mosquitto MQTT
-mosquitto/data/
-mosquitto/log/
-mosquitto/config/passwd
-mosquitto/config/passwd.tmp
-mosquitto/config/*.local.conf
-
-# Evitar commitear propuestas y notas locales
-MOSQUITTO_PASSWORD_UI_PROPOSAL.txt
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Environment variables
-.env
-.env.local
-.env.*.local
-
-# Local key file with prototype credentials (should not be committed)
-key.env
-
-# Lock file created by backend entrypoint to mark provisioning completed
-# Local state — do not commit
-mysite/.provisioned
-
-# Backups
-*.bak
-*.backup
-*.tmp
-backups/
-
-# configuracion de IA
-AGENTS.md
-/spec 
-opencode.json
-BACKEND_MQTT_PLAN.md
-checklist.txt
-
-# Archivos de análisis/resultados que no deben versionarse
-ANALISIS_IMPLEMENTACION_MQTT (2).md
-
-# contraseñas 
-KeysRaspberry.txt
-# Local tests folder (do not commit)
-local_tests/
-
-# Python/test artifacts
 .pytest_cache/
 coverage.xml
 htmlcov/
 .mypy_cache/
 .cache/
 
-# Frontend build outputs
+# ==============================================================================
+# 2. Django Backend & Logs
+# ==============================================================================
+*.log
+*.log.*
+mysite/mqtt_worker.log
+mysite/logs/
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+mysite/.provisioned
+
+# ==============================================================================
+# 3. Node & Frontend (scada-ui)
+# ==============================================================================
+node_modules/
+scada-ui/node_modules/
 scada-ui/dist/
 scada-ui/.cache/
-scada-ui/node_modules/
+scada-ui/build.log
+scada-ui/nohup.out
+scada-ui/bun.lock
+scada-ui/bun.lockb
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+nohup.out
 
-# Local test scripts and temp helpers
+# ==============================================================================
+# 4. Mosquitto & Base de Datos
+# ==============================================================================
+mosquitto/data/
+mosquitto/log/
+mosquitto/config/passwd
+mosquitto/config/passwd.tmp
+mosquitto/config/*.local.conf
+data/*.db
+control/raspberry_gateway/data/*.db
+
+# ==============================================================================
+# 5. Archivos de Variables de Entorno & Credenciales
+# ==============================================================================
+.env
+.env.local
+.env.*.local
+.env.smtp
+key.env
+KeysRaspberry.txt
+
+# ==============================================================================
+# 6. Borradores, Propuestas y Notas Locales (Preservadas en Disco)
+# ==============================================================================
+ANALISIS_IMPLEMENTACION_MQTT*.md
+BACKEND_MQTT_PLAN*.md
+MOSQUITTO_PASSWORD_UI_PROPOSAL*.txt
+checklist*.txt
+AGENTS.md
+opencode.json
+/spec/
+local_tests/
 test_scripts/
-# Excluir scripts temporales en la raíz, pero mantener utilidades de `mysite/scripts`
-# (no ignoramos `mysite/scripts/reset_admin.py`)
+mysite/test_scripts/
+mysite/INSTRUCCIONES_APLICAR_CAMBIOS.md
+mysite/GUIA_MIGRACION.md
+mysite/INICIO_RAPIDO.md
+mysite/COMANDOS_RAPIDOS.ps1
+mysite/aplicar_migraciones.bat
+backups/
 
-# Editor backups
+# ==============================================================================
+# 7. IDEs & Sistema Operativo
+# ==============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
 *~
+.DS_Store
+Thumbs.db
+desktop.ini
 .project
 .classpath
