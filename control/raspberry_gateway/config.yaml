@@ -85,15 +85,21 @@ arduino_protocol:
     vaciar_mezcla: V
 database:
   auto_vacuum: true
-  backup_enabled: true
+  backup_enabled: false
   backup_interval_hours: 24
+  backup_max_files: 3
   backup_path: ./backups
   cleanup:
     enabled: true
-    interval_hours: 6
-    keep_critical_events: 30
+    interval_hours: 2
+    keep_critical_events: 7
+  measurement_interval_seconds: 5
+  save_measurements: false  # Solo guarda configuración y eventos críticos; no gasta la microSD con lecturas periódicas
+  save_raw_data: false
+  max_measurements: 25000
   path: ./control/raspberry_gateway/data/scada_local.db
-  retention_days: 7
+  retention_days: 2
+
 development:
   enabled: false
   mock_data_interval: 2
