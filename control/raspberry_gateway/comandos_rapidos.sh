@@ -27,10 +27,10 @@ alias gw-db-backup="cp /opt/scada_gateway/data/scada_local.db ~/backup_\$(date +
 alias gw-config="sudo nano /opt/scada_gateway/config.yaml"
 alias gw-reload="gw-restart"
 
-# MQTT Testing
-alias mqtt-sub-all="mosquitto_sub -h localhost -t 'scada/#' -v"
-alias mqtt-sub-sensores="mosquitto_sub -h localhost -t 'scada/planta1/sensores/#' -v"
-alias mqtt-pub-test="mosquitto_pub -h localhost -t 'scada/test' -m 'hello'"
+# MQTT Testing (Detecta automáticamente el tenant de config.yaml)
+alias mqtt-sub-all='CFG="/opt/scada_gateway/config.yaml"; [ ! -f "$CFG" ] && CFG="./config.yaml"; TENANT=$(grep -E "^\s*tenant:" "$CFG" 2>/dev/null | head -n1 | awk "{print \$2}"); mosquitto_sub -h localhost -t "${TENANT:-rafaela_sa}/#" -v'
+alias mqtt-sub-sensores='CFG="/opt/scada_gateway/config.yaml"; [ ! -f "$CFG" ] && CFG="./config.yaml"; TENANT=$(grep -E "^\s*tenant:" "$CFG" 2>/dev/null | head -n1 | awk "{print \$2}"); mosquitto_sub -h localhost -t "${TENANT:-rafaela_sa}/+/+/+/sensores/#" -v'
+alias mqtt-pub-test="mosquitto_pub -h localhost -t 'test' -m 'hello'"
 
 # Sistema
 alias gw-temp="vcgencmd measure_temp"

@@ -299,28 +299,19 @@ sudo systemctl start raspberry_gateway
 
 ## 📁 Base de datos local (data/scada_local.db)
 
-El gateway utiliza una base de datos SQLite local para almacenar mediciones, eventos, alarmas, diagnósticos y comandos cuando se ejecuta en la Raspberry.
+El gateway utiliza una base de datos SQLite local optimizada para **proteger la tarjeta microSD** de la Raspberry Pi:
 
+- **Almacenamiento liviano:** Guarda la configuración persistente del sistema (`configuracion_sistema`), eventos y alarmas críticas.
+- **Sin desgaste de memoria flash:** Las mediciones periódicas se transmiten en tiempo real por MQTT sin escribir continuamente en la tarjeta microSD (`save_measurements: false`).
 - Ruta por defecto (configurable en `config.yaml`): `./data/scada_local.db`.
-- Gestionada por `control/raspberry_gateway/src/data_storage.py` (tablas: `mediciones`, `eventos`, `alarmas`, `diagnostico`, `comandos`).
+- Gestionada por `control/raspberry_gateway/src/data_storage.py`.
 
 Recomendaciones:
 
 - No versionar el fichero de base de datos. Está ignorado por `.gitignore` con la regla `data/*.db`.
 - En Raspberry Pi se recomienda ubicar la base de datos en `control/raspberry_gateway/data/` o en `/var/lib/scada_gateway/data/` y actualizar `config.yaml` con la ruta absoluta.
-- Hacer backups periódicos antes de cambios importantes. Ver `control/raspberry_gateway/scripts/backup_db.sh`.
 
-### Backup rápido
-
-Script de ejemplo incluido: `control/raspberry_gateway/scripts/backup_db.sh`.
-
-Ejecutar:
-
-```bash
-bash control/raspberry_gateway/scripts/backup_db.sh
-```
-
-```
+---
 
 ## ⚙️ Configuración
 
@@ -329,24 +320,24 @@ Editar `config.yaml`:
 ```yaml
 serial:
   port: "/dev/ttyACM0"
-  baudrate: 9600
+  baudrate: 115200
   timeout: 1.0
   reconnect_delay: 5
 
 mqtt:
-  broker: "mqtt.ejemplo.com"
+  broker: "100.69.41.46"
   port: 1883
-  username: "scada_user"
+  username: "admin"
   password: "secure_password"
-  client_id: "raspberry_scada_gateway"
-  topics:
-    base: "scada/planta1"
+  tenant: "rafaela_sa"
+  gateway_id: "d83add60dbb0"  # MAC física de la Raspberry Pi (automática)
+  default_sector: "a1"
+  default_system: "linea_mezclado_1"
 
 database:
   path: "./data/scada_local.db"
-  retention_days: 7
-  backup_enabled: true
-  backup_interval_hours: 24
+  save_measurements: false  # Protege la tarjeta microSD de escrituras continuas
+  backup_enabled: false
 
 diagnostics:
   enabled: true
@@ -384,80 +375,83 @@ Comandos compatibles con Sistema_SCADA:
 
 ### MQTT Topics
 
-#### Estructura Estándar (Recomendada)
+#### Estructura Estándar Dinámica
 ```
-{tenant}/{gateway_id}/{seccion}/{sistema}/{variable}
-Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/nivel_bombo1
+{tenant}/{gateway_id}/{sector}/{sistema}/{variable}
+rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/sensores/bombo1
 ```
+* `{tenant}`: Empresa o inquilino (configurable, ej: `rafaela_sa`).
+* `{gateway_id}`: Dirección MAC física del hardware Raspberry Pi (obtenida automáticamente, fija, ej: `d83add60dbb0`).
+* `{sector}`: Sección o planta (configurable, ej: `a1`).
+* `{sistema}`: Línea de mezclado (configurable, ej: `linea_mezclado_1`).
 
-#### Publicación - Telemetría (Raspberry → App Web)
+#### Publicación - Telemetría (Raspberry → App Web / Broker)
 ```
-Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/sensores/nivel_bombo1    # Nivel bombo 1
-Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/sensores/nivel_bombo2    # Nivel bombo 2
-Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/sensores/nivel_mezcla    # Nivel mezcla
-Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/sensores/caudal_1        # Caudal líquido 1
-Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/sensores/caudal_2        # Caudal líquido 2
-Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/actuadores/bomba1        # Estado bomba 1
-Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/actuadores/bomba2        # Estado bomba 2
-Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/actuadores/bomba_mezcla  # Estado bomba mezcla
-Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/actuadores/mezclador     # Estado mezclador
-Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/actuadores/bomba_repo    # Estado bomba reposición
-Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/proceso/tiempo_restante  # Tiempo restante
-Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/alarmas                  # Alarmas y errores
-Rafaela_S.A/d83add60dbb0/status                                         # Estado online/offline del gateway
+rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/sensores/bombo1          # Nivel bombo 1
+rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/sensores/bombo2          # Nivel bombo 2
+rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/sensores/mezcla          # Nivel mezcla
+rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/sensores/caudal          # Caudales líquidos 1 y 2
+rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/actuadores/bombas        # Estado bombas (1, 2, mezcla, repo)
+rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/actuadores/mezclador     # Estado motor mezclador (3s ON / 5s OFF)
+rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/actuadores/electrovalvulas # Estado electroválvulas
+rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/proceso/mezclado         # Estado del proceso (0/1/2) y error
+rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/proceso/tiempo_restante  # Tiempo restante (horas, minutos)
+rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/alarmas                  # Alarmas y errores
+rafaela_sa/d83add60dbb0/status                                       # Estado online/offline del gateway
 ```
 
 #### Suscripción - Comandos (App Web → Raspberry)
-**Formato único de comandos:**
+**Formato de comandos:**
 ```
-Rafaela_S.A/d83add60dbb0/{seccion}/{sistema}/{accion}
+rafaela_sa/d83add60dbb0/{sector}/{sistema}/{accion}
 
 Acciones disponibles:
-- reposicion         # Reposición de bombos
-- freno_reposicion   # Detener reposición
-- detener            # Detener mezcla
+- reposicion         # Reposición de bombos (bombo, limite_porcentaje)
+- freno_reposicion   # Detener reposición de emergencia
+- detener            # Detener mezcla / pausar
 - reanudar           # Reanudar mezcla
-- vaciar             # Vaciar contenedor
-- desechar           # Desechar mezcla
-- mezcla             # Preparar mezcla (configuración de líquidos)
+- vaciar             # Vaciar contenedor (corte al 10%)
+- desechar           # Desechar mezcla (corte al 10%)
+- mezcla             # Preparar receta de mezcla (liquido_1, liquido_2, hora, minuto)
+- configuracion      # Actualizar parámetros en caliente
 ```
 
 #### Ejemplos de Comandos con JSON
 ```bash
 # 1. Reposición (bombo 1 al 75%)
-mosquitto_pub -h 192.168.137.1 \
-  -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/reposicion" \
+mosquitto_pub -h 100.69.41.46 -u admin -P admin \
+  -t "rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/reposicion" \
   -m '{"bombo": 1, "limite_porcentaje": 75}'
 
 # 2. Freno Reposición
-mosquitto_pub -h 192.168.137.1 \
-  -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/freno_reposicion" \
+mosquitto_pub -h 100.69.41.46 -u admin -P admin \
+  -t "rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/freno_reposicion" \
   -m '{}'
 
 # 3. Detener Mezcla
-mosquitto_pub -h 192.168.137.1 \
-  -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/detener" \
+mosquitto_pub -h 100.69.41.46 -u admin -P admin \
+  -t "rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/detener" \
   -m '{}'
 
 # 4. Reanudar Mezcla
-mosquitto_pub -h 192.168.137.1 \
-  -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/reanudar" \
+mosquitto_pub -h 100.69.41.46 -u admin -P admin \
+  -t "rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/reanudar" \
   -m '{}'
 
 # 5. Vaciar Contenedor
-mosquitto_pub -h 192.168.137.1 \
-  -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/vaciar" \
+mosquitto_pub -h 100.69.41.46 -u admin -P admin \
+  -t "rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/vaciar" \
   -m '{}'
 
 # 6. Desechar Mezcla
-mosquitto_pub -h 192.168.137.1 \
-  -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/desechar" \
+mosquitto_pub -h 100.69.41.46 -u admin -P admin \
+  -t "rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/desechar" \
   -m '{}'
 
-# 7. Preparar Mezcla (50% liq1, 30% liq2, 15 minutos)
-mosquitto_pub -h 192.168.137.1 \
-  -t "Rafaela_S.A/d83add60dbb0/A1/linea_mezclado_1/mezcla" \
-  -m '{"liquido_1": 50, "liquido_2": 30, "hora": 0, "minuto": 15}'
+# 7. Preparar Mezcla (5L liq1, 3L liq2, 15 minutos)
+mosquitto_pub -h 100.69.41.46 -u admin -P admin \
+  -t "rafaela_sa/d83add60dbb0/a1/linea_mezclado_1/mezcla" \
+  -m '{"liquido_1": 5.0, "liquido_2": 3.0, "hora": 0, "minuto": 15}'
 ```
 
 #### Estructura de Payloads JSON
