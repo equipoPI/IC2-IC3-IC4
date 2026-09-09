@@ -30,6 +30,18 @@
 #define BAUD_RATE 115200  // Mayor velocidad que Bluetooth (antes 9600)
 
 // ============================================================
+// PARÁMETROS GLOBALES EDITABLES
+// ============================================================
+
+// Factor de conversión de caudalímetros (pulsos por litro)
+// Modificar este valor si cambia el modelo del caudalímetro
+float pulsosnecesarios = 450.0;
+
+// Porcentaje de corte de nivel para vaciado y desecho (%)
+// El bombo queda suspendido en el líquido y nunca se vacía completamente
+float PORCENTAJE_CORTE_VACIADO = 10.0;
+
+// ============================================================
 // VARIABLES GLOBALES - TEMPORIZACIÓN
 // ============================================================
 
@@ -37,8 +49,8 @@ unsigned long tiempoEnvio = 0;
 unsigned long tiempoMonitoreo = 0;
 unsigned long TInicioMezclado = 0;
 unsigned long previousMillis = 0;
-unsigned long TiempoMotorOn = 5000;
-unsigned long TiempoMotorOff = 2000;
+unsigned long TiempoMotorOn = 3000;   // 3 segundos trabajando (para no sobreexigir el motor)
+unsigned long TiempoMotorOff = 5000;  // 5 segundos parado
 
 // ============================================================
 // VARIABLES GLOBALES - COMUNICACIÓN
@@ -279,7 +291,7 @@ void loop() {
 // ============================================================
 
 void nivel() {
-  while (i <= 3) {
+  while (i < 3) {
     digitalWrite(trig, HIGH);
     delayMicroseconds(5);
     digitalWrite(trig, LOW);
@@ -396,7 +408,7 @@ void filtrado() {
 // ============================================================
 
 void pulse1() {
-  waterFlow1 += 1.0 / 450;  // 450 para caudalímetro 1/2 pulgada
+  waterFlow1 += 1.0 / pulsosnecesarios;
 }
 
 
@@ -407,7 +419,7 @@ void pulse1() {
 
 void pulse2() {
   if (terminoLlenadoLiquido1 == 1) {
-    waterFlow2 += 1.0 / 450;
+    waterFlow2 += 1.0 / pulsosnecesarios;
   }
 }
 
@@ -515,11 +527,21 @@ void activacion() {
   }
 
   // ========== CÁLCULO DE TIEMPOS Y LÍQUIDOS ==========
-  TiempoHorUso = TiempoHor * 3600000;
-  TiempoMinUso = TiempoMin * 60000;
+  TiempoHorUso = (unsigned long)TiempoHor * 3600000UL;
+  TiempoMinUso = (unsigned long)TiempoMin * 60000UL;
   
-  liquido1 = (Ingrediente1 - 10000) / 1000;
-  liquido2 = (Ingrediente2 - 20000) / 1000;
+  // Soporta tanto valores directos de litros (ej: 5.0) como el protocolo heredado (15000 -> 5.0)
+  if (Ingrediente1 >= 10000.0) {
+    liquido1 = (Ingrediente1 - 10000.0) / 1000.0;
+  } else {
+    liquido1 = Ingrediente1;
+  }
+
+  if (Ingrediente2 >= 20000.0) {
+    liquido2 = (Ingrediente2 - 20000.0) / 1000.0;
+  } else {
+    liquido2 = Ingrediente2;
+  }
 
   // ========== CONTROL DE TRANSFERENCIA DE LÍQUIDOS ==========
   if (continuar == 1) {
@@ -561,42 +583,77 @@ void activacion() {
       liquido1 = 0;
       liquido2 = 0;
       TInicioMezclado = millis();
+      previousMillis = millis();
+      MotorOn = 1;
+      MotorOff = 0;
     }
   }
 
   // ========== CONTROL DE MEZCLADO (ON/OFF INTERMITENTE) ==========
   if (activarMezcla == 1) {
     unsigned long currentMillis = millis();
-    EProceso = 1;
+    unsigned long tiempoTranscurrido = currentMillis - TInicioMezclado;
+    unsigned long tiempoTotalMezclado = TiempoHorUso + TiempoMinUso;
 
-    // Encender el motor por TiempoMotorOn
-    if ((currentMillis - previousMillis) >= TiempoMotorOn && MotorOn == 1) {
-      digitalWrite(7, HIGH);  // Apagar motor
-      previousMillis = currentMillis;
-      MotorOn = 0;
-      MotorOff = 1;
-    }
+    // Verificar si el tiempo de mezcla ya finalizó
+    if (tiempoTotalMezclado > 0 && tiempoTranscurrido >= tiempoTotalMezclado) {
+      activarMezcla = 0;
+      digitalWrite(7, HIGH);  // Apagar motor mezclador
+      EMezclador = 0;
+      horaRest = 0;
+      minRest = 0;
+      EProceso = 2;           // Estado 2: Mezcla finalizada
+    } else {
+      EProceso = 1;
 
-    // Apagar el motor por TiempoMotorOff
-    if ((currentMillis - previousMillis) >= TiempoMotorOff && MotorOff == 1) {
-      digitalWrite(7, LOW);  // Encender motor
-      previousMillis = currentMillis;
-      MotorOn = 1;
-      MotorOff = 0;
+      // Cálculo de tiempo restante en tiempo real
+      if (tiempoTotalMezclado > tiempoTranscurrido) {
+        unsigned long tiempoRestanteMs = tiempoTotalMezclado - tiempoTranscurrido;
+        horaRest = tiempoRestanteMs / 3600000UL;
+        minRest = (tiempoRestanteMs % 3600000UL) / 60000UL;
+      } else {
+        horaRest = 0;
+        minRest = 0;
+      }
+
+      // Encender el motor por TiempoMotorOn (3 segundos trabajando)
+      if ((currentMillis - previousMillis) >= TiempoMotorOn && MotorOn == 1) {
+        digitalWrite(7, HIGH);  // Apagar motor mezclador
+        EMezclador = 0;
+        previousMillis = currentMillis;
+        MotorOn = 0;
+        MotorOff = 1;
+      }
+
+      // Apagar el motor por TiempoMotorOff (5 segundos parado)
+      if ((currentMillis - previousMillis) >= TiempoMotorOff && MotorOff == 1) {
+        digitalWrite(7, LOW);   // Encender motor mezclador (activo bajo)
+        EMezclador = 1;
+        previousMillis = currentMillis;
+        MotorOn = 1;
+        MotorOff = 0;
+      }
     }
   }
 
   // ========== DETENCIÓN DE PROCESO ==========
-  if ((activarMezcla == 0 && continuar == 0) || detener == 1) {
-    EProceso = 0;
+  if ((activarMezcla == 0 && continuar == 0 && vaciar == 0 && desechar == 0) || detener == 1) {
+    if (detener == 1) {
+      EProceso = 0;
+      activarMezcla = 0;
+      continuar = 0;
+      vaciar = 0;
+      desechar = 0;
+      detener = 0;
+    }
     digitalWrite(7, HIGH);  // Apagar motor mezclador
     digitalWrite(5, HIGH);  // Apagar bomba Bombo 1
     digitalWrite(6, HIGH);  // Apagar bomba Bombo 2
     digitalWrite(4, HIGH);  // Apagar bomba mezcla
     EBomba1 = 0;
     EBomba2 = 0;
-    desechar = 0;
-    detener = 0;
+    EBombaM = 0;
+    EMezclador = 0;
   }
 
   // ========== DESECHAR PRODUCCIÓN ==========
@@ -607,26 +664,31 @@ void activacion() {
     cantidad1 = 0;
     liquido2 = 0;
     cantidad2 = 0;
+
+    // Corte automático por porcentaje de nivel
+    if (constrainedPorcentaje3 <= PORCENTAJE_CORTE_VACIADO) {
+      digitalWrite(4, HIGH); // Apagar bomba mezcla
+      EBombaM = 0;
+      desechar = 0;
+      EProceso = 0;
+    }
   }
 
   // ========== VACIAR BOMBO DE MEZCLA ==========
   if (vaciar == 1) {
-    if (EProceso == 2) {
-      digitalWrite(4, LOW);  // Encender bomba del bombo de mezcla
-      EBombaM = 1;
-      liquido1 = 0;
-      cantidad1 = 0;
-      liquido2 = 0;
-      cantidad2 = 0;
-    }
+    digitalWrite(4, LOW);  // Encender bomba del bombo de mezcla
+    EBombaM = 1;
+    liquido1 = 0;
+    cantidad1 = 0;
+    liquido2 = 0;
+    cantidad2 = 0;
 
-    if (EProceso == 0 || EProceso == 1) {
-      digitalWrite(4, LOW);  // Encender bomba del bombo de mezcla
-      EBombaM = 1;
-      liquido1 = 0;
-      cantidad1 = 0;
-      liquido2 = 0;
-      cantidad2 = 0;
+    // Corte automático por porcentaje de nivel
+    if (constrainedPorcentaje3 <= PORCENTAJE_CORTE_VACIADO) {
+      digitalWrite(4, HIGH); // Apagar bomba mezcla
+      EBombaM = 0;
+      vaciar = 0;
+      EProceso = 0;
     }
   }
 }
@@ -722,10 +784,30 @@ void lectura() {
       obtencionEntero();
     }
 
+    if (valor == 'L' || valor == 'l') {
+      // Admite comandos "L1..." o "L2..." o "L..."
+      delay(2);
+      char sub = RASPBERRY_SERIAL.peek();
+      if (sub == '1') {
+        RASPBERRY_SERIAL.read(); // consumir '1'
+        g = 5;
+        obtencionEntero();
+        continuar = 1;
+      } else if (sub == '2') {
+        RASPBERRY_SERIAL.read(); // consumir '2'
+        g = 6;
+        obtencionEntero();
+      } else {
+        g = 5;
+        obtencionEntero();
+        continuar = 1;
+      }
+    }
+
     if (valor == 'V') {
       g = 7;
       vaciar = 1;
-      obtencionEntero();
+      // No llama obtencionEntero() para evitar bloqueo
     }
 
     if (valor == 'D') {
@@ -738,6 +820,10 @@ void lectura() {
     if (valor == 'A') {
       g = 10;
       continuar = 1;
+      if (EProceso == 0 && (TiempoHorUso + TiempoMinUso) > 0 && activarMezcla == 0) {
+        activarMezcla = 1;
+        previousMillis = millis();
+      }
     }
 
     if (valor == 'T') {
@@ -749,7 +835,7 @@ void lectura() {
       obtencionEntero();
     }
 
-    if (valor == 'h') {
+    if (valor == 'h' || valor == 'M' || valor == 'm') {
       g = 12;
       obtencionEntero();
     }
@@ -767,10 +853,13 @@ void lectura() {
 // ============================================================
 
 void obtencionEntero() {
-  delay(30);
+  delay(15);
   while (RASPBERRY_SERIAL.available()) {
     char c = RASPBERRY_SERIAL.read();
-    estado += c;
+    if (c == '\r' || c == '\n') break;
+    if ((c >= '0' && c <= '9') || c == '.') {
+      estado += c;
+    }
   }
 
   if (estado.length() > 0) {
@@ -781,10 +870,10 @@ void obtencionEntero() {
       bomboSeleccionado = estado.toInt();
     }
     if (g == 5) {
-      Ingrediente1 = estado.toInt();
+      Ingrediente1 = estado.toDouble();
     }
     if (g == 6) {
-      Ingrediente2 = estado.toInt();
+      Ingrediente2 = estado.toDouble();
     }
     if (g == 11) {
       TiempoHor = estado.toInt();
