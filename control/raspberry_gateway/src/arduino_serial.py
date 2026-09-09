@@ -272,6 +272,9 @@ class ArduinoSerial:
                         self.serial_conn.write(f"{command}\n".encode('utf-8'))
                         self.serial_conn.flush()
                         
+                        # Pausa de seguridad de 50ms para que el microcontrolador procese antes de recibir otro comando
+                        time.sleep(0.05)
+                        
                         self.stats['messages_sent'] += 1
                         with self.data_lock:
                             self.last_sent_command = {

@@ -80,6 +80,7 @@ class SimuladorGUI:
         
         # Configuración por defecto
         self.config_path = CURRENT_DIR / "config.yaml"
+        self.showing_topics = False
         self.load_config_defaults()
         
         # Construir Interfaz
@@ -260,30 +261,57 @@ class SimuladorGUI:
 
     def _show_datos_conexion(self):
         """Muestra datos y estado en el panel"""
+        self.showing_topics = False
         self.btn_show_datos.config(bg="#a855f7", relief="sunken")
         self.btn_show_topics_conexion.config(bg="#2563eb", relief="raised")
         self._refresh_tab_conexion()
     
     def _show_topics_conexion(self):
         """Muestra tópicos MQTT en el panel"""
+        self.showing_topics = True
         self.btn_show_topics_conexion.config(bg="#0ea5e9", relief="sunken")
         self.btn_show_datos.config(bg="#9333ea", relief="raised")
-        self._refresh_tab_conexion(show_topics=True)
+        self._refresh_tab_conexion()
     
-    def _refresh_tab_conexion(self, show_topics=False):
-        """Actualiza el contenido del panel de visualización"""
+    def _refresh_tab_conexion(self, show_topics=None):
+        """Actualiza el contenido del panel de visualización preservando el scroll"""
+        if show_topics is not None:
+            self.showing_topics = bool(show_topics)
+            
+        try:
+            scroll_disp = self.display_text.yview()
+        except Exception:
+            scroll_disp = None
+            
+        try:
+            scroll_info = self.info_conexion.yview()
+        except Exception:
+            scroll_info = None
+
         self.display_text.config(state="normal")
         self.display_text.delete(1.0, "end")
         self.info_conexion.config(state="normal")
         self.info_conexion.delete(1.0, "end")
         
-        if show_topics:
+        if self.showing_topics:
             self._display_topics_conexion()
         else:
             self._display_datos_conexion()
         
         self.display_text.config(state="disabled")
         self.info_conexion.config(state="disabled")
+        
+        if scroll_disp and scroll_disp[0] > 0.0:
+            try:
+                self.display_text.yview_moveto(scroll_disp[0])
+            except Exception:
+                pass
+                
+        if scroll_info and scroll_info[0] > 0.0:
+            try:
+                self.info_conexion.yview_moveto(scroll_info[0])
+            except Exception:
+                pass
     
     def _display_datos_conexion(self):
         """Muestra datos y valores actuales"""
@@ -761,6 +789,10 @@ Sistema: {sistema}
                     self.emitir_telemetria_actual()
                 except Exception as e:
                     pass
+            try:
+                self.root.after(0, self._refresh_tab_conexion)
+            except Exception:
+                pass
             time.sleep(self.intervalo_envio.get())
 
     def on_close(self):

@@ -129,6 +129,59 @@ class MQTTClient:
             })
         return topics_info
 
+    def update_topic_context(
+        self,
+        tenant: Optional[str] = None,
+        sector: Optional[str] = None,
+        system: Optional[str] = None,
+    ) -> bool:
+        """
+        Actualiza dinámicamente el contexto de topics (tenant, sector, sistema).
+        Desuscribe los topics anteriores y se suscribe a los nuevos topics en caliente.
+        
+        Args:
+            tenant: Nuevo tenant opcional
+            sector: Nuevo sector/sección opcional
+            system: Nuevo sistema/línea opcional
+            
+        Returns:
+            True si se actualizó correctamente
+        """
+        with self.data_lock:
+            old_filters = list(self.subscribe_filters)
+            
+            if tenant:
+                self.tenant = self._sanitize_token(tenant)
+            if sector:
+                self.default_sector = self._sanitize_token(sector)
+            if system:
+                self.default_system = self._sanitize_token(system)
+                
+            self.subscribe_filters = self._build_subscribe_filters([])
+            
+            if self.connected and self.client:
+                # Desuscribir topics viejos
+                for f in old_filters:
+                    try:
+                        self.client.unsubscribe(f)
+                        logger.debug(f"Desuscrito de topic anterior: {f}")
+                    except Exception as e:
+                        logger.warning(f"Error al desuscribir {f}: {e}")
+                
+                # Suscribir a los nuevos topics
+                for f in self.subscribe_filters:
+                    try:
+                        self.client.subscribe(f, qos=self.qos)
+                        logger.info(f"Suscrito a nuevo topic: {f}")
+                    except Exception as e:
+                        logger.error(f"Error al suscribir nuevo topic {f}: {e}")
+                        
+            logger.info(
+                f"Contexto MQTT actualizado dinámicamente: "
+                f"prefix={self.topic_prefix}, sector={self.default_sector}, sistema={self.default_system}"
+            )
+            return True
+
     def _sanitize_token(self, value: str) -> str:
         """Convierte a minúsculas y remueve caracteres no permitidos en MQTT topics"""
         token = str(value).strip().lower().replace(" ", "_")
@@ -161,13 +214,24 @@ class MQTTClient:
         """
         filters: List[str] = []
         
-        # ✅ Construir topics específicos para COMANDOS
-        # subscribe_topics contiene: {reposicion, mezcla, freno_reposicion, configuracion, consultas}
+        # ✅ Construir topics específicos para COMANDOS configurados
         for cmd_name, cmd_path in self.subscribe_topics.items():
             # Construir topic completo: tenant/gateway_id/sector/sistema/comando
             full_topic = f"{self.topic_prefix}/{self.default_sector}/{self.default_system}/{cmd_path}"
             filters.append(full_topic)
             logger.debug(f"📥 Se suscribe a comando: {full_topic}")
+
+        # ✅ Suscribirse a comandos estándar directos (sin prefijo comandos/)
+        comandos_directos = [
+            "reposicion", "freno_reposicion", "detener", "reanudar",
+            "vaciar", "desechar", "descartar", "mezcla", "control",
+            "configuracion", "consultas"
+        ]
+        for cmd in comandos_directos:
+            direct_topic = f"{self.topic_prefix}/{self.default_sector}/{self.default_system}/{cmd}"
+            if direct_topic not in filters:
+                filters.append(direct_topic)
+                logger.debug(f"📥 Se suscribe a comando directo: {direct_topic}")
         
         # Agregar filtros configurados (si los hay)
         for f in configured_filters:
@@ -356,13 +420,18 @@ class MQTTClient:
             action = command_meta.get("action")
             logger.info(f"🔔 Comando MQTT recibido: acción='{action}' | topic='{topic}'")
             
-            # Resolver la acción específica desde el campo 'accion' del payload si la ruta fue /accion
-            if action == 'control' and isinstance(data, dict) and data.get('accion'):
+            # Resolver la acción específica desde el campo 'accion' del payload si la ruta fue /control o /accion
+            if action in ['control', 'accion'] and isinstance(data, dict) and data.get('accion'):
                 payload_action = str(data.get('accion')).lower()
                 if payload_action in self.command_callbacks:
                     action = payload_action
-                elif payload_action in ['freno_reposicion', 'parar_reposicion']:
-                    action = 'reposicion'
+                elif payload_action in ['freno_reposicion', 'parar_reposicion', 'frenar']:
+                    action = 'reposicion' if 'reposicion' in self.command_callbacks else 'control'
+            elif action in ['detener', 'reanudar', 'continuar', 'parar', 'pausar', 'vaciar', 'desechar', 'descartar', 'frenar', 'freno_reposicion']:
+                if action not in self.command_callbacks and 'control' in self.command_callbacks:
+                    action = 'control'
+            elif action in ['reposicion'] and action not in self.command_callbacks and 'control' in self.command_callbacks:
+                action = 'control'
 
             callback = self.command_callbacks.get(action)
             if callback:

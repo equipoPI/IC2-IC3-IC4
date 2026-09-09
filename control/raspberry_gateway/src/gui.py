@@ -227,7 +227,12 @@ class GatewayGUI:
         self._refresh_display()
     
     def _refresh_display(self):
-        """Actualiza el contenido del panel de alternancia"""
+        """Actualiza el contenido del panel de alternancia preservando la posición del scroll"""
+        try:
+            scroll_pos = self.display_text.yview()
+        except Exception:
+            scroll_pos = None
+
         self.display_text.config(state="normal")
         self.display_text.delete(1.0, "end")
         
@@ -237,17 +242,35 @@ class GatewayGUI:
             self._display_topics()
         
         self.display_text.config(state="disabled")
+        
+        if scroll_pos and scroll_pos[0] > 0.0:
+            try:
+                self.display_text.yview_moveto(scroll_pos[0])
+            except Exception:
+                pass
     
     def _display_datos(self):
         """Muestra datos de sensores y telemetría de Arduino"""
         content = "📊 LECTURAS DE SENSORES Y ACTUADORES\n"
         content += "=" * 38 + "\n\n"
         
-        # 1. Obtener datos: primero de memoria en vivo, o fallback a base de datos
+        # 1. Obtener datos de forma thread-safe desde memoria en vivo, o fallback a base de datos
         data = None
-        if self.gateway.arduino and hasattr(self.gateway.arduino, 'last_received_data') and self.gateway.arduino.last_received_data:
-            data = self.gateway.arduino.last_received_data
-        elif hasattr(self.gateway, 'storage') and self.gateway.storage:
+        raw_line = ""
+        arduino = getattr(self.gateway, 'arduino', None)
+        if arduino and hasattr(arduino, 'last_received_data'):
+            lock = getattr(arduino, 'data_lock', None)
+            if lock:
+                with lock:
+                    if arduino.last_received_data:
+                        data = dict(arduino.last_received_data)
+                    raw_line = getattr(arduino, 'last_raw_line', "") or ""
+            else:
+                if arduino.last_received_data:
+                    data = dict(arduino.last_received_data)
+                raw_line = getattr(arduino, 'last_raw_line', "") or ""
+        
+        if not data and hasattr(self.gateway, 'storage') and self.gateway.storage:
             try:
                 db_data = self.gateway.storage.get_latest_measurement()
                 if db_data:
@@ -255,14 +278,8 @@ class GatewayGUI:
             except Exception:
                 pass
         
-        # 2. Trama serial Raw (Cadena de datos del Arduino)
-        raw_line = ""
-        if self.gateway.arduino and hasattr(self.gateway.arduino, 'last_raw_line') and self.gateway.arduino.last_raw_line:
-            raw_line = self.gateway.arduino.last_raw_line
-        elif data and data.get('raw'):
-            raw_line = data.get('raw')
-        elif data and data.get('raw_data'):
-            raw_line = data.get('raw_data')
+        if not raw_line and data:
+            raw_line = data.get('raw') or data.get('raw_data') or ""
 
         content += "📡 CADENA SERIAL RAW (ARDUINO):\n"
         content += "-" * 38 + "\n"
@@ -481,20 +498,20 @@ class GatewayGUI:
             return ['/dev/ttyACM0', '/dev/ttyUSB0', 'COM3', 'COM4']
     
     def _apply_config(self):
-        """Guarda los cambios de configuración"""
+        """Guarda los cambios de configuración en memoria y en disco (config.yaml y SQLite)"""
         try:
             # Recolectar valores del formulario
-            broker = self.entry_broker.get()
-            port = int(self.entry_port.get()) if self.entry_port.get() else 1883
-            user = self.entry_user.get()
-            password = self.entry_pass.get()
-            tenant = self.entry_tenant.get()
-            gateway_id = self.entry_gateway_id.get()
-            sector = self.entry_sector.get()
-            serial_port = self.combo_serial_port.get()
-            system_name = self.entry_system_name.get()
+            broker = self.entry_broker.get().strip()
+            port = int(self.entry_port.get().strip()) if self.entry_port.get().strip() else 1883
+            user = self.entry_user.get().strip()
+            password = self.entry_pass.get().strip()
+            tenant = self.entry_tenant.get().strip()
+            gateway_id = self.entry_gateway_id.get().strip()
+            sector = self.entry_sector.get().strip()
+            serial_port = self.combo_serial_port.get().strip()
+            system_name = self.entry_system_name.get().strip()
             
-            # Actualizar configuración del gateway
+            # Actualizar configuración del gateway en memoria
             if self.gateway.config.get('mqtt'):
                 self.gateway.config['mqtt'].update({
                     'broker': broker,
@@ -510,13 +527,23 @@ class GatewayGUI:
             if self.gateway.config.get('serial'):
                 self.gateway.config['serial']['port'] = serial_port
             
-            messagebox.showinfo("✓ Configuración Guardada", 
-                              f"Cambios guardados correctamente.\\n\\n"
-                              f"Broker: {broker}:{port}\\n"
-                              f"Tenant: {tenant}\\n"
-                              f"Sistema: {system_name}\\n"
-                              f"Puerto Serial: {serial_port}\\n\\n"
-                              f"Nota: Algunos cambios requieren reiniciar el gateway.")
+            # Persistir efectivamente los cambios en disco físico (config.yaml y SQLite)
+            guardado = False
+            if hasattr(self.gateway, 'save_config'):
+                guardado = self.gateway.save_config()
+            
+            if guardado:
+                messagebox.showinfo("✓ Configuración Guardada", 
+                                  f"Configuración guardada en disco (config.yaml y base de datos local).\n\n"
+                                  f"Broker: {broker}:{port}\n"
+                                  f"Tenant: {tenant}\n"
+                                  f"Sistema: {system_name}\n"
+                                  f"Puerto Serial: {serial_port}\n\n"
+                                  f"Los cambios persistirán ante reinicios de la Raspberry Pi.\n"
+                                  f"Nota: Para aplicar broker o puerto serial en ejecución activa, reinicia el servicio (gw-restart).")
+            else:
+                messagebox.showwarning("⚠️ Advertencia",
+                                     "Los cambios se aplicaron en memoria pero hubo un problema al escribir en disco.")
         except ValueError as e:
             messagebox.showerror("Error", f"Valor inválido en los campos de configuración")
     
@@ -569,6 +596,11 @@ class GatewayGUI:
                 self.lbl_errors.config(text=str(stats.get('errors', 0)))
             
             # Panel de información
+            try:
+                info_scroll = self.info_text.yview()
+            except Exception:
+                info_scroll = None
+
             self.info_text.config(state="normal")
             self.info_text.delete(1.0, "end")
             
@@ -616,6 +648,15 @@ class GatewayGUI:
             
             self.info_text.insert("end", info)
             self.info_text.config(state="disabled")
+
+            if info_scroll and info_scroll[0] > 0.0:
+                try:
+                    self.info_text.yview_moveto(info_scroll[0])
+                except Exception:
+                    pass
+
+            # Refrescar en tiempo real el Panel Lateral - Alternancia
+            self._refresh_display()
             
         except Exception as e:
             pass

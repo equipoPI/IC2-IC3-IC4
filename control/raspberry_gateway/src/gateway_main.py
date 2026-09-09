@@ -3,6 +3,7 @@ Gateway principal - Orquestador del sistema Raspberry Pi
 Integra Arduino Serial, MQTT, almacenamiento local y diagnósticos
 """
 
+import os
 import sys
 import signal
 import time
@@ -139,6 +140,14 @@ class SCADAGateway:
             logger.info("Inicializando cliente MQTT...")
             self.mqtt = MQTTClient(config_path=self.config_path, data_lock=self._data_lock)
             self.mqtt.register_command_callback('reposicion', self._on_command_reposicion)
+            self.mqtt.register_command_callback('freno_reposicion', self._on_command_control)
+            self.mqtt.register_command_callback('frenar', self._on_command_control)
+            self.mqtt.register_command_callback('detener', self._on_command_control)
+            self.mqtt.register_command_callback('reanudar', self._on_command_control)
+            self.mqtt.register_command_callback('continuar', self._on_command_control)
+            self.mqtt.register_command_callback('vaciar', self._on_command_control)
+            self.mqtt.register_command_callback('desechar', self._on_command_control)
+            self.mqtt.register_command_callback('descartar', self._on_command_control)
             self.mqtt.register_command_callback('mezcla', self._on_command_mezcla)
             self.mqtt.register_command_callback('control', self._on_command_control)
             self.mqtt.register_command_callback('configuracion', self._on_command_config)
@@ -252,6 +261,55 @@ class SCADAGateway:
         if self.diagnostics:
             self.diagnostics.set_mqtt_status(self.mqtt.connected)
         return connected
+
+    def save_config(self, new_config: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Persiste la configuración en config.yaml y en la base de datos local SQLite.
+        Garantiza que cualquier cambio realizado en la GUI o recibido por comando no se pierda al reiniciar.
+        
+        Args:
+            new_config: Diccionario opcional con configuraciones a actualizar
+            
+        Returns:
+            True si se guardó correctamente en disco
+        """
+        try:
+            if new_config:
+                for sec, vals in new_config.items():
+                    if isinstance(vals, dict) and isinstance(self.config.get(sec), dict):
+                        self.config[sec].update(vals)
+                    else:
+                        self.config[sec] = vals
+
+            # 1. Guardar atómicamente en config.yaml usando un archivo temporal
+            temp_config_path = f"{self.config_path}.tmp"
+            with open(temp_config_path, 'w', encoding='utf-8') as f:
+                yaml.dump(self.config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+            
+            os.replace(temp_config_path, self.config_path)
+            logger.success(f"Configuración guardada en archivo: {self.config_path}")
+
+            # 2. Respaldar configuración en base de datos local SQLite
+            if self.storage:
+                for seccion in ['mqtt', 'serial', 'planta', 'database']:
+                    if seccion in self.config:
+                        self.storage.save_system_config(seccion, self.config[seccion])
+                self.storage.save_event('config', 'Configuración guardada en config.yaml y base de datos local', {'archivo': self.config_path}, 'sistema')
+
+            # 3. Si cambiaron tenant, sector o sistema, actualizar dinámicamente topics en cliente MQTT en caliente
+            if self.mqtt and 'mqtt' in self.config:
+                mqtt_cfg = self.config['mqtt']
+                self.mqtt.update_topic_context(
+                    tenant=mqtt_cfg.get('tenant'),
+                    sector=mqtt_cfg.get('default_sector'),
+                    system=mqtt_cfg.get('default_system'),
+                )
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error guardando configuración en disco: {e}")
+            return False
     
     def stop(self):
         """
@@ -528,7 +586,12 @@ class SCADAGateway:
             if getattr(self, 'processing_paused', False):
                 logger.info("Gateway en pausa: ignorando comando de control recibido por MQTT")
                 return
-            accion = data.get('accion', '').upper()
+            
+            # Resolver la acción: desde el payload, desde _topic_meta o desde el último segmento del topic
+            topic_meta = data.get('_topic_meta', {}) if isinstance(data, dict) else {}
+            topic_action = topic_meta.get('action') or (topic.split('/')[-1] if topic else '')
+            raw_accion = data.get('accion') if isinstance(data, dict) else None
+            accion = str(raw_accion or topic_action or '').strip().upper()
 
             if accion == 'REPOSICION':
                 bombo = int(data.get('bombo', 1))
@@ -611,7 +674,7 @@ class SCADAGateway:
     
     def _on_command_config(self, data: Dict[str, Any], topic: str):
         """
-        Procesa cambios de configuración desde MQTT
+        Procesa cambios de configuración desde MQTT y los persiste en disco
         
         Args:
             data: Datos de configuración
@@ -621,14 +684,20 @@ class SCADAGateway:
             logger.info("Gateway en pausa: ignorando configuración recibida por MQTT")
             return
 
-        logger.info(f"Configuración recibida: {data}")
-        self.storage.save_event('config', 'Configuración actualizada', data, 'mqtt')
+        logger.info(f"Configuración recibida por MQTT: {data}")
+        # Si la carga útil incluye claves de configuración válidas, aplicarlas y persistirlas
+        config_guardada = self.save_config(data)
+        
+        if self.storage:
+            self.storage.save_event('config', 'Configuración actualizada por MQTT', data, 'mqtt')
+            
         self._publish_command_response(
             data,
             topic,
-            status="executed",
-            code=0,
-            result={"config_aplicada": True},
+            status="executed" if config_guardada else "failed",
+            code=0 if config_guardada else 3,
+            result={"config_aplicada": config_guardada},
+            error=None if config_guardada else "Error al guardar configuración en disco"
         )
     
     def _on_query_historico(self, data: Dict[str, Any], topic: str):
