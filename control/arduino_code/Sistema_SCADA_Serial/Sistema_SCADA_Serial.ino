@@ -47,6 +47,8 @@ float PORCENTAJE_CORTE_VACIADO = 10.0;
 
 unsigned long tiempoEnvio = 0;
 unsigned long tiempoMonitoreo = 0;
+unsigned long tiempoLecturaNivel = 0;
+const unsigned long INTERVALO_LECTURA_NIVEL = 100; // Leer sensores cada 100 ms para evitar acumulación de ecos
 unsigned long TInicioMezclado = 0;
 unsigned long previousMillis = 0;
 unsigned long TiempoMotorOn = 3000;   // 3 segundos trabajando (para no sobreexigir el motor)
@@ -110,6 +112,9 @@ float distancia;
 float distancia1;
 float distancia2;
 float distancia3;
+float ultimaDistanciaValida1 = 28.0; // Valor por defecto (tanque vacío)
+float ultimaDistanciaValida2 = 28.0;
+float ultimaDistanciaValida3 = 28.0;
 float constrainedPorcentaje1 = 0.0;
 float constrainedPorcentaje2 = 0.0;
 float constrainedPorcentaje3 = 0.0;
@@ -234,18 +239,21 @@ void setup() {
   // ============================================================
   
   for (int K = 0; K < NUM_READINGS; K++) {
-    readings1[K] = 0;
-    readings2[K] = 0;
-    readings3[K] = 0;
+    readings1[K] = 28.0;
+    readings2[K] = 28.0;
+    readings3[K] = 28.0;
   }
+  total1 = 28.0 * NUM_READINGS;
+  total2 = 28.0 * NUM_READINGS;
+  total3 = 28.0 * NUM_READINGS;
 
   // Inicializar valores suavizados
-  smoothed1 = 0;
-  smoothed2 = 0;
-  smoothed3 = 0;
-  initialized1 = false;
-  initialized2 = false;
-  initialized3 = false;
+  smoothed1 = 28.0;
+  smoothed2 = 28.0;
+  smoothed3 = 28.0;
+  initialized1 = true;
+  initialized2 = true;
+  initialized3 = true;
 
   // ============================================================
   // CONFIGURACIÓN TIMER PARA LECTURA DE COMANDOS
@@ -269,9 +277,12 @@ void loop() {
     tiempoMonitoreo = millis();
   }
 
-  // Control de nivel de depósitos
-  nivel();      // Lee los 3 sensores ultrasónicos
-  filtrado();   // Aplica filtrado estadístico
+  // Control de nivel de depósitos temporizado (cada 100 ms para evitar solapamiento de ecos)
+  if ((tiempoLecturaNivel + INTERVALO_LECTURA_NIVEL) <= millis()) {
+    nivel();      // Lee los 3 sensores ultrasónicos con pausas entre ellos
+    filtrado();   // Aplica filtrado estadístico
+    tiempoLecturaNivel = millis();
+  }
 
   // Envío de datos a Raspberry Pi cada 1 segundo
   if ((tiempoEnvio + 1000) <= millis()) {
@@ -287,13 +298,18 @@ void loop() {
 
 // ============================================================
 // FUNCIÓN: nivel()
-// Descripción: Lee los 3 sensores ultrasónicos de nivel
+// Descripción: Lee los 3 sensores ultrasónicos de nivel con retardo entre lecturas
 // ============================================================
 
 void nivel() {
   while (i < 3) {
+    // Asegurar LOW antes de emitir pulso
+    digitalWrite(trig, LOW);
+    delayMicroseconds(2);
+
+    // Pulso de disparo de 10 microsegundos según datasheet HC-SR04
     digitalWrite(trig, HIGH);
-    delayMicroseconds(5);
+    delayMicroseconds(10);
     digitalWrite(trig, LOW);
     
     // pulseIn con timeout de 23200 microsegundos (~4 metros máximo)
@@ -302,24 +318,31 @@ void nivel() {
     // Validar que la medición sea válida (2-30 cm = rango de operación)
     distancia = duracion / 58.2;  // Conversión a cm
     
-    // Si la medición es inválida (< 1cm o > 40cm), no actualizar
-    if (distancia < 1 || distancia > 40) {
-      distancia = 999;  // Valor inválido que será ignorado por el filtro
+    // Si la medición es inválida (< 1cm o > 40cm), marcar como 999
+    if (distancia < 1.0 || distancia > 40.0) {
+      distancia = 999.0;  // Valor inválido que será sustituido por la última medición válida
     }
     
+    // Mapeo ordenado con el conexionado físico documentado:
+    // i = 0 -> Pines 16 (Trig) y 17 (Echo) = Bombo 1
+    // i = 1 -> Pines 18 (Trig) y 19 (Echo) = Bombo 2
+    // i = 2 -> Pines 20 (Trig) y 21 (Echo) = Bombo Mezcla (3)
     if (i == 0) {
-      distancia2 = distancia;
+      distancia1 = distancia;
     }
     if (i == 1) {
-      distancia3 = distancia;
+      distancia2 = distancia;
     }
     if (i == 2) {
-      distancia1 = distancia;
+      distancia3 = distancia;
     }
     
     trig = trig + 2;
     eco = eco + 2;
     i = i + 1;
+
+    // Pausa de 15 ms entre sensores para permitir la extinción de rebotes acústicos residuales
+    delay(15);
   }
   
   // Resetear variables para próxima lectura
@@ -340,11 +363,21 @@ void filtrado() {
   total2 = total2 - readings2[readIndex];
   total3 = total3 - readings3[readIndex];
 
-  // Guardar los valores de distancia (solo si son válidos)
-  // Si son inválidos (999), usar la última lectura válida para mantener estabilidad
-  if (distancia1 != 999) readings1[readIndex] = distancia1;
-  if (distancia2 != 999) readings2[readIndex] = distancia2;
-  if (distancia3 != 999) readings3[readIndex] = distancia3;
+  // Si la medición es válida, actualizar última válida; si es 999, reutilizar la última válida
+  if (distancia1 != 999.0) {
+    ultimaDistanciaValida1 = distancia1;
+  }
+  readings1[readIndex] = ultimaDistanciaValida1;
+
+  if (distancia2 != 999.0) {
+    ultimaDistanciaValida2 = distancia2;
+  }
+  readings2[readIndex] = ultimaDistanciaValida2;
+
+  if (distancia3 != 999.0) {
+    ultimaDistanciaValida3 = distancia3;
+  }
+  readings3[readIndex] = ultimaDistanciaValida3;
 
   // Añadir la nueva lectura a la suma total
   total1 = total1 + readings1[readIndex];
@@ -368,7 +401,6 @@ void filtrado() {
   // Aplica filtro exponencial al promedio para reducir oscilaciones residuales
   // Formula: smoothed = smoothed_anterior + ALPHA * (average - smoothed_anterior)
   
-  // Inicialización robusta con bandera
   if (!initialized1) {
     smoothed1 = average1;
     initialized1 = true;
