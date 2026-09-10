@@ -425,8 +425,8 @@ const MonitorizacionSCADA = () => {
         // Actualización dinámica en tiempo real de estado ONLINE/OFFLINE del dispositivo en el estado React
         if (list.length > 0) {
           const latestReading = list[list.length - 1];
-          const lastMs = new Date(latestReading.timestamp).getTime();
-          const computedEstado = (Date.now() - lastMs) < 45000 ? "ONLINE" : "OFFLINE";
+          const lastMs = latestReading?.timestamp ? new Date(latestReading.timestamp).getTime() : 0;
+          const computedEstado = ((Date.now() - lastMs) < 60000) ? "ONLINE" : "OFFLINE";
 
           setDispositivos((prevDisps) =>
             prevDisps.map((d) => {
@@ -434,7 +434,7 @@ const MonitorizacionSCADA = () => {
               if (isMatch) {
                 return {
                   ...d,
-                  estado: computedEstado,
+                  estado: d.estado === "OFFLINE" ? "OFFLINE" : computedEstado,
                   valor_lectura: Number(latestReading.valor),
                   unidad_lectura: latestReading.unidad || d.unidad_lectura,
                   ultima_lectura: latestReading.timestamp

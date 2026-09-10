@@ -152,6 +152,8 @@ export function ControlReposicionModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           freno: true,
+          accion: "frenar",
+          comando: "frenar",
           bombo: 0,
           limite_porcentaje: 0,
         }),

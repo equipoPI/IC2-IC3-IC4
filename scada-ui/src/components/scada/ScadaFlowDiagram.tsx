@@ -51,7 +51,24 @@ export const machineDefinitions: Record<string, { label: string; connectedNodes?
 const isDeviceActive = (dev: any) => {
   if (!dev) return false;
   const val = dev.valor_lectura;
-  return val === 1 || val === 1.0 || String(val) === "1" || String(val) === "1.0" || String(val).toLowerCase() === "true" || String(val).toLowerCase() === "open" || String(val).toLowerCase() === "running";
+  return val === 1 || val === 1.0 || String(val) === "1" || String(val) === "1.0" || String(val).toLowerCase() === "true" || String(val).toLowerCase() === "open" || String(val).toLowerCase() === "running" || (typeof val === 'number' && val > 0);
+};
+
+export const getCanonicalNodeId = (item: any): string => {
+  const s = String(item.node_id || item.numero_serie || item.id || '').toLowerCase();
+  if (s === 'bomba1' || s === 'pump-1') return 'pump-1';
+  if (s === 'bomba2' || s === 'pump-2') return 'pump-2';
+  if (s === 'mixer-1' || s.includes('mezclador') || s.includes('mixer')) return 'mixer-1';
+  if (s === 'bomba_mezcla' || s.includes('bomba_mezcla')) return 'bomba_mezcla';
+  if (s === 'bomba_reposicion' || s.includes('bomba_reposicion') || s.includes('reposicion')) return 'bomba_reposicion';
+  if (s === 'electrovalvula-1' || s === 'electrovalvula1') return 'electrovalvula-1';
+  if (s === 'electrovalvula-2' || s === 'electrovalvula2') return 'electrovalvula-2';
+  if (s === 'sensor-3' || s === 'caudal1' || s.includes('flujo_a')) return 'sensor-3';
+  if (s === 'sensor_caudal_02' || s === 'caudal2' || s.includes('flujo_b')) return 'sensor_caudal_02';
+  if (s === 'tank-1' || s.includes('bombo1')) return 'tank-1';
+  if (s === 'tank-2' || s.includes('bombo2')) return 'tank-2';
+  if (s === 'tank-3' || s.includes('mezcla')) return 'tank-3';
+  return item.node_id || item.numero_serie || `dev_${item.id}`;
 };
 
 interface ScadaFlowDiagramProps {
@@ -196,6 +213,7 @@ const ScadaFlowDiagram = ({
           unit: unit.unidad || 'L',
           status: (unit.estado || 'ACTIVE').toLowerCase(),
           content: unit.contenido || 'Materia Prima',
+          node_id: unit.node_id
         }
       });
     });
@@ -217,24 +235,27 @@ const ScadaFlowDiagram = ({
       else if (cat === 'MEZCLADORA') nodeType = 'mixer';
       else nodeType = 'sensor';
 
-      let nodeData: any = { label: dev.nombre || dev.numero_serie };
+      let nodeData: any = { 
+        label: dev.nombre || dev.numero_serie,
+        numero_serie: dev.numero_serie 
+      };
 
       if (nodeType === 'pump') {
         nodeData = {
-          label: dev.nombre || dev.numero_serie,
+          ...nodeData,
           isRunning: isAct,
           rpm: isAct ? 1450 : 0,
           power: isAct ? 75 : 0,
         };
       } else if (nodeType === 'valve') {
         nodeData = {
-          label: dev.nombre || dev.numero_serie,
+          ...nodeData,
           isOpen: isAct,
           flowRate: isAct ? 12.5 : 0,
         };
       } else if (nodeType === 'mixer') {
         nodeData = {
-          label: dev.nombre || dev.numero_serie,
+          ...nodeData,
           isRunning: isAct,
           speed: isAct ? 120 : 0,
           temperature: 25,
@@ -258,11 +279,11 @@ const ScadaFlowDiagram = ({
           unit = unit || 'bar';
         } else {
           sensorType = 'flow';
-          unit = unit || 'L/min';
+          unit = 'L';
         }
 
         nodeData = {
-          label: dev.nombre || dev.numero_serie,
+          ...nodeData,
           value: val,
           unit: unit,
           type: sensorType,
@@ -288,8 +309,8 @@ const ScadaFlowDiagram = ({
         { id: 'tank-2', type: 'tank', position: { x: 300, y: 350 }, data: { label: 'Tanque B', level: 45, temperature: 30, capacity: 800, unit: 'L', status: 'active' } },
         { id: 'pump-1', type: 'pump', position: { x: 460, y: 80 }, data: { label: 'Bomba A', isRunning: false, rpm: 0, power: 0 } },
         { id: 'pump-2', type: 'pump', position: { x: 460, y: 380 }, data: { label: 'Bomba B', isRunning: false, rpm: 0, power: 0 } },
-        { id: 'sensor-3', type: 'sensor', position: { x: 580, y: 80 }, data: { label: 'Caudalímetro 1', value: 0.0, unit: 'L/min', type: 'flow', status: 'normal' } },
-        { id: 'sensor_caudal_02', type: 'sensor', position: { x: 580, y: 380 }, data: { label: 'Caudalímetro 2', value: 0.0, unit: 'L/min', type: 'flow', status: 'normal' } },
+        { id: 'sensor-3', type: 'sensor', position: { x: 580, y: 80 }, data: { label: 'Caudalímetro 1', value: 0.0, unit: 'L', type: 'flow', status: 'normal' } },
+        { id: 'sensor_caudal_02', type: 'sensor', position: { x: 580, y: 380 }, data: { label: 'Caudalímetro 2', value: 0.0, unit: 'L', type: 'flow', status: 'normal' } },
         { id: 'mixer-1', type: 'mixer', position: { x: 720, y: 200 }, data: { label: 'Mezclador M1', isRunning: false, speed: 0, temperature: 25 } },
         { id: 'tank-3', type: 'tank', position: { x: 860, y: 200 }, data: { label: 'Tanque Salida', level: 30, temperature: 25, capacity: 1500, unit: 'L', status: 'active' } },
         { id: 'bomba_mezcla', type: 'pump', position: { x: 990, y: 220 }, data: { label: 'Bomba de Mezcla', isRunning: false, rpm: 0, power: 0 } },
@@ -393,10 +414,16 @@ const ScadaFlowDiagram = ({
 
       if (!isMounted) return;
 
-      const loadedNodes = initialNodes.map(node => ({
-        ...node,
-        position: cachedPositions[node.id] || node.position
-      }));
+      const loadedNodes = initialNodes.map(node => {
+        const savedPos = cachedPositions[node.id] ||
+                         (node.data?.node_id && cachedPositions[node.data.node_id]) ||
+                         (node.data?.numero_serie && cachedPositions[node.data.numero_serie]) ||
+                         node.position;
+        return {
+          ...node,
+          position: savedPos
+        };
+      });
 
       setNodes(loadedNodes);
       setEdges(cachedEdges);
@@ -404,7 +431,7 @@ const ScadaFlowDiagram = ({
 
     initLayout();
     return () => { isMounted = false; };
-  }, [storageKey, selectedSistema]);
+  }, [storageKey, selectedSistema, initialNodes.length]);
 
   // Merge updated device telemetry into existing nodes WITHOUT resetting node positions!
   useEffect(() => {
@@ -421,10 +448,18 @@ const ScadaFlowDiagram = ({
       const hasRealInitialNodes = initialNodes.some(n => n.id.startsWith('dev_') || n.id.startsWith('unit_'));
       const prevHasFallbackNodes = prevNodes.some(n => !n.id.startsWith('dev_') && !n.id.startsWith('unit_'));
 
-      // If initialNodes now has real DB nodes, filter out any stale static fallback nodes from prevNodes
       let baseNodes = prevNodes;
       if (hasRealInitialNodes && prevHasFallbackNodes) {
-        baseNodes = prevNodes.filter(n => n.id.startsWith('dev_') || n.id.startsWith('unit_'));
+        baseNodes = initialNodes.map(node => {
+          const savedPos = cachedPositions[node.id] ||
+                           (node.data?.node_id && cachedPositions[node.data.node_id]) ||
+                           (node.data?.numero_serie && cachedPositions[node.data.numero_serie]) ||
+                           node.position;
+          return {
+            ...node,
+            position: savedPos
+          };
+        });
       }
 
       if (baseNodes.length === 0) {
@@ -446,7 +481,7 @@ const ScadaFlowDiagram = ({
         };
       });
 
-      // Add any newly registered nodes that weren't in baseNodes
+      // Add any newly registered nodes that weren't in prevNodes
       const prevIds = new Set(baseNodes.map(p => p.id));
       initialNodes.forEach(fresh => {
         if (!prevIds.has(fresh.id)) {
@@ -460,6 +495,52 @@ const ScadaFlowDiagram = ({
       return updatedNodes;
     });
   }, [initialNodes, storageKey]);
+
+  // Animar tuberías y flujo dinámico según el estado de bombas, mezclador y válvulas
+  useEffect(() => {
+    const activeMap = new Map<string, boolean>();
+    nodes.forEach(n => {
+      const isRunning = Boolean(
+        n.data?.isRunning ||
+        n.data?.isOpen ||
+        (n.data?.type === 'flow' && Number(n.data?.value) > 0)
+      );
+      activeMap.set(n.id, isRunning);
+      if (n.data?.numero_serie) {
+        activeMap.set(n.data.numero_serie, isRunning);
+      }
+      if (n.id.startsWith('dev_')) {
+        const raw = n.id.replace('dev_', '').split('_')[0];
+        activeMap.set(raw, isRunning);
+      }
+    });
+
+    setEdges(prevEdges => {
+      if (!prevEdges || prevEdges.length === 0) return prevEdges;
+      let hasChanges = false;
+      const updated = prevEdges.map(edge => {
+        const sourceActive = activeMap.get(edge.source) || false;
+        const targetActive = activeMap.get(edge.target) || false;
+        const isActive = sourceActive || targetActive;
+
+        if (edge.animated !== isActive) {
+          hasChanges = true;
+        }
+
+        return {
+          ...edge,
+          animated: isActive,
+          style: {
+            ...edge.style,
+            stroke: isActive ? '#06b6d4' : (edge.style?.stroke || 'hsl(var(--primary))'),
+            strokeWidth: isActive ? 3 : (edge.style?.strokeWidth || 2),
+            filter: isActive ? 'drop-shadow(0 0 6px rgba(6,182,212,0.8))' : 'none'
+          }
+        };
+      });
+      return hasChanges ? updated : prevEdges;
+    });
+  }, [nodes]);
 
   // Handle drag stop to auto-persist node positions
   const onNodeDragStop = useCallback((_: any, node: Node) => {

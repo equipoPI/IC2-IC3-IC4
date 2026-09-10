@@ -395,9 +395,11 @@ class DispositivoSCADASerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         ret = super().to_representation(instance)
         from django.utils import timezone
-        if instance.ultima_lectura:
+        if instance.estado == 'OFFLINE':
+            ret['estado'] = 'OFFLINE'
+        elif instance.ultima_lectura:
             delta = (timezone.now() - instance.ultima_lectura).total_seconds()
-            ret['estado'] = "ONLINE" if delta < 90 else "OFFLINE"
+            ret['estado'] = "ONLINE" if delta < 60 else "OFFLINE"
         else:
             ret['estado'] = instance.estado or "OFFLINE"
         return ret
@@ -927,12 +929,29 @@ class RegistroMantenimientoSerializer(serializers.ModelSerializer):
 
 class RegistroAuditoriaSerializer(serializers.ModelSerializer):
     usuario_username = serializers.CharField(source='usuario.username', read_only=True)
+    topico = serializers.SerializerMethodField(read_only=True)
     timestamp = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = models.RegistroAuditoria
-        fields = ['id', 'usuario', 'usuario_username', 'accion', 'modulo', 'objeto', 'descripcion', 'datos', 'ip_origen', 'timestamp']
-        read_only_fields = ['timestamp', 'usuario_username']
+        fields = ['id', 'usuario', 'usuario_username', 'accion', 'modulo', 'objeto', 'descripcion', 'datos', 'ip_origen', 'timestamp', 'topico']
+        read_only_fields = ['timestamp', 'usuario_username', 'topico']
+
+    def get_topico(self, obj):
+        if obj.datos and isinstance(obj.datos, dict):
+            if 'topico' in obj.datos:
+                return obj.datos['topico']
+            if 'topic' in obj.datos:
+                return obj.datos['topic']
+        if obj.descripcion:
+            import re
+            m = re.search(r'\(Topic:\s*([^\)]+)\)', obj.descripcion)
+            if m:
+                return m.group(1).strip()
+            m2 = re.search(r'topic\s+([^\s,]+)', obj.descripcion, re.IGNORECASE)
+            if m2:
+                return m2.group(1).strip()
+        return None
 
 
 class SistemaSerializer(serializers.ModelSerializer):

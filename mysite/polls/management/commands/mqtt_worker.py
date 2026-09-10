@@ -2,6 +2,8 @@ import json
 import logging
 import re
 import time
+import threading
+import datetime
 from django.core.management.base import BaseCommand
 from django.db import close_old_connections
 from django.utils import timezone
@@ -109,6 +111,9 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR(f"Error al conectar al broker {broker_url}:{puerto}. Reintentando en 5s... Detalles: {e}"))
                 time.sleep(5)
 
+        # Iniciar watcher de inactividad para marcar dispositivos OFFLINE tras 60s
+        self._start_offline_watcher()
+
         # Loop infinito
         try:
             client.loop_forever()
@@ -128,12 +133,44 @@ class Command(BaseCommand):
     def on_disconnect(self, client, userdata, rc):
         self.stdout.write(self.style.WARNING(f"Desconectado del broker MQTT (rc={rc})"))
 
+    def _start_offline_watcher(self):
+        def watch_offline():
+            while True:
+                time.sleep(15)
+                try:
+                    close_old_connections()
+                    cutoff = timezone.now() - datetime.timedelta(seconds=60)
+                    offline_count = DispositivoSCADA.objects.filter(
+                        estado='ONLINE',
+                        ultima_lectura__lt=cutoff
+                    ).update(estado='OFFLINE')
+                    if offline_count > 0:
+                        self.stdout.write(self.style.WARNING(f"[Offline Watcher] {offline_count} dispositivos marcados como OFFLINE por inactividad (>60s)."))
+                        broadcast_ws_update({'event': 'device_offline_timeout', 'count': offline_count})
+                except Exception as ex:
+                    logger.debug(f"Offline watcher error: {ex}")
+
+        t = threading.Thread(target=watch_offline, daemon=True)
+        t.start()
+
     def on_message(self, client, userdata, msg):
         try:
             close_old_connections()
             topic = msg.topic
             payload_str = msg.payload.decode('utf-8').strip()
             telemetria_parts = topic.split('/')
+
+            # 0. Procesar Estado LWT de Gateway (Will / shutdown limpio)
+            if topic.endswith('/status'):
+                status_val = payload_str.lower()
+                gw_id = telemetria_parts[1] if len(telemetria_parts) > 1 else 'd83add60dbb0'
+                if 'offline' in status_val:
+                    DispositivoSCADA.objects.filter(gateway_id=gw_id).update(estado='OFFLINE')
+                    self.stdout.write(self.style.WARNING(f"[Gateway LWT] Gateway {gw_id} reportó OFFLINE. Dispositivos marcados como OFFLINE."))
+                    return
+                elif 'online' in status_val:
+                    DispositivoSCADA.objects.filter(gateway_id=gw_id).update(estado='ONLINE')
+                    return
 
             # 1. Procesar Alarmas enviadas por el Gateway
             if topic.endswith('/alarmas') or '/alarmas' in topic:
@@ -335,6 +372,23 @@ class Command(BaseCommand):
                         porcentaje = payload_dict.get('porcentaje')
                         nivel = payload_dict.get('nivel')
                         
+                        # Si el sensor físico HC-SR04 está apagado o sin respuesta (distancia 0.0 o 999.0 cm)
+                        es_invalido = False
+                        if nivel is not None:
+                            try:
+                                n_val = float(nivel)
+                                if n_val <= 0.0 or n_val >= 999.0:
+                                    es_invalido = True
+                            except (ValueError, TypeError):
+                                es_invalido = True
+
+                        if es_invalido:
+                            s_dev = DispositivoSCADA.objects.filter(numero_serie=sensor_serie).first()
+                            if s_dev:
+                                s_dev.estado = "OFFLINE"
+                                s_dev.save(update_fields=['estado'])
+                            return
+
                         # Actualizar almacenamiento
                         if porcentaje is not None:
                             try:
@@ -403,7 +457,7 @@ class Command(BaseCommand):
                         )
                         return
 
-                    # 4. Procesar caudalímetros
+                    # 4. Procesar caudalímetros (flujo acumulado en Litros)
                     if device_id == 'caudal':
                         # caudal_1 -> sensor-3 (Sensor de Flujo Tubería A)
                         # caudal_2 -> sensor_caudal_02 (Sensor de Flujo Tubería B)
@@ -417,7 +471,7 @@ class Command(BaseCommand):
                                 LecturaSensor.objects.create(
                                     dispositivo=dev,
                                     valor=val,
-                                    unidad='L/min',
+                                    unidad='L',
                                     calidad='BUENA'
                                 )
                             except (ValueError, TypeError):
@@ -429,40 +483,49 @@ class Command(BaseCommand):
                                 LecturaSensor.objects.create(
                                     dispositivo=dev,
                                     valor=val,
-                                    unidad='L/min',
+                                    unidad='L',
                                     calidad='BUENA'
                                 )
                             except (ValueError, TypeError):
                                 pass
                         return
 
+                    # Helper para registrar lecturas de actuadores evitando saturar la BD
+                    def registrar_actuador(serie, name, cat, val_num):
+                        dev = get_or_create_device(serie, name, cat)
+                        if not hasattr(self, '_last_actuator_state'):
+                            self._last_actuator_state = {}
+                        last_val = self._last_actuator_state.get(serie)
+                        if last_val is None or abs(last_val - val_num) > 0.001:
+                            self._last_actuator_state[serie] = val_num
+                            LecturaSensor.objects.create(
+                                dispositivo=dev,
+                                valor=val_num,
+                                unidad='',
+                                calidad='BUENA'
+                            )
+                        return dev
+
                     # 5. Procesar actuadores (Bombas, Mezclador y Electroválvulas)
                     if device_id == 'electrovalvulas':
                         valvulas_map = {
                             'electrovalvula1': ('electrovalvula-1', 'Válvula Rep. A', 'VALVULA'),
-                            'electrovalvula2': ('electrovalvula-2', 'Válvula Rep. B', 'VALVULA')
+                            'electrovalvula2': ('electrovalvula-2', 'Válvula Rep. B', 'VALVULA'),
+                            'valvula_bombo1': ('electrovalvula-1', 'Válvula Rep. A', 'VALVULA'),
+                            'valvula_bombo2': ('electrovalvula-2', 'Válvula Rep. B', 'VALVULA')
                         }
                         for var_name, var_value in payload_dict.items():
                             if var_name in valvulas_map:
                                 try:
                                     val = float(var_value)
                                     serie, name, cat = valvulas_map[var_name]
-                                    dev = get_or_create_device(serie, name, cat)
-                                    LecturaSensor.objects.create(
-                                        dispositivo=dev,
-                                        valor=val,
-                                        unidad='',
-                                        calidad='BUENA'
-                                    )
+                                    registrar_actuador(serie, name, cat, val)
                                 except (ValueError, TypeError):
                                     pass
+                        broadcast_ws_update({'topic': topic, 'device_id': device_id})
                         return
 
                     if device_id == 'bombas':
-                        # bomba1 -> pump-1
-                        # bomba2 -> pump-2
-                        # bomba_mezcla -> bomba_mezcla
-                        # bomba_reposicion -> bomba_reposicion
                         bombas_map = {
                             'bomba1': ('bomba1', 'Bomba Principal P1', 'BOMBA'),
                             'pump-1': ('pump-1', 'Bomba Principal P1', 'BOMBA'),
@@ -476,31 +539,23 @@ class Command(BaseCommand):
                                 try:
                                     val = float(var_value)
                                     serie, name, cat = bombas_map[var_name]
-                                    dev = get_or_create_device(serie, name, cat)
-                                    LecturaSensor.objects.create(
-                                        dispositivo=dev,
-                                        valor=val,
-                                        unidad='',
-                                        calidad='BUENA'
-                                    )
+                                    registrar_actuador(serie, name, cat, val)
                                 except (ValueError, TypeError):
                                     pass
+                        broadcast_ws_update({'topic': topic, 'device_id': device_id})
                         return
 
                     if device_id == 'mezclador':
                         estado = payload_dict.get('estado')
+                        if estado is None:
+                            estado = payload_dict.get('mezclador')
                         if estado is not None:
                             try:
                                 val = float(estado)
-                                dev = get_or_create_device('mixer-1', 'Mezclador M1', 'MEZCLADORA')
-                                LecturaSensor.objects.create(
-                                    dispositivo=dev,
-                                    valor=val,
-                                    unidad='',
-                                    calidad='BUENA'
-                                )
+                                registrar_actuador('mixer-1', 'Mezclador M1', 'MEZCLADORA', val)
                             except (ValueError, TypeError):
                                 pass
+                        broadcast_ws_update({'topic': topic, 'device_id': device_id})
                         return
 
                     # 6. Procesar cualquier otro dispositivo genérico agrupado

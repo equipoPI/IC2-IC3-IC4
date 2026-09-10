@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import apiFetch from "@/lib/api";
-import { FlaskConical, Play, Clock, Droplet, Settings2, FileText } from "lucide-react";
+import { FlaskConical, Play, Clock, Droplet, Settings2, FileText, AlertTriangle } from "lucide-react";
 
 interface ControlRecetaLiquidosModalProps {
   open: boolean;
@@ -42,7 +42,11 @@ export function ControlRecetaLiquidosModal({
   const [unidadMedida, setUnidadMedida] = useState<"L" | "mL">("L");
   const [modoCarga, setModoCarga] = useState<"plantilla" | "manual">("manual");
 
+  const [tankMezclaInfo, setTankMezclaInfo] = useState<{ volumen: number; capacidad: number; porcentaje: number } | null>(null);
+
   const getItemId = (item: any) => String(item?.id || item?.numero_serie || item?.pk || "");
+
+  const isTankFull = (tankMezclaInfo?.porcentaje || 0) > 5.0;
 
   useEffect(() => {
     if (open) {
@@ -68,6 +72,20 @@ export function ControlRecetaLiquidosModal({
             }) || items[0];
             setSelectedDispositivo(getItemId(match));
           }
+        }
+      }
+
+      // Cargar unidades de almacenamiento para verificar nivel de mezcla
+      const resTanks = await apiFetch("/api/v1/unidades-almacenamiento/");
+      if (resTanks.ok) {
+        const dataTanks = await resTanks.json();
+        const tanks = Array.isArray(dataTanks) ? dataTanks : dataTanks.results || [];
+        const mixTank = tanks.find((t: any) => t.node_id === 'tank-3' || (t.nombre && t.nombre.toLowerCase().includes('mezcla')));
+        if (mixTank && mixTank.capacidad) {
+          const vol = Number(mixTank.volumen_actual || 0);
+          const cap = Number(mixTank.capacidad || 1500);
+          const pct = (vol / cap) * 100;
+          setTankMezclaInfo({ volumen: vol, capacidad: cap, porcentaje: pct });
         }
       }
 
@@ -120,6 +138,14 @@ export function ControlRecetaLiquidosModal({
   };
 
   const handleTransmitirReceta = async () => {
+    if (isTankFull) {
+      toast({
+        title: "⚠️ Bombo de mezcla ocupado",
+        description: `El tanque contiene ${tankMezclaInfo?.volumen} L de producto terminado. Vacíe o deseche el contenido antes de iniciar.`,
+        variant: "destructive"
+      });
+      return;
+    }
     setLoading(true);
     try {
       const activeDev = getActiveDevice();
@@ -399,14 +425,24 @@ export function ControlRecetaLiquidosModal({
             </div>
           </div>
 
+          {isTankFull && (
+            <div className="p-3 bg-amber-950/30 border border-amber-500/50 rounded-lg flex items-start gap-2.5 text-xs text-amber-200 animate-in fade-in">
+              <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold block text-amber-300">Bombo de Mezcla con producto pendiente ({tankMezclaInfo?.volumen} L - {Math.round(tankMezclaInfo?.porcentaje || 0)}%)</span>
+                <span>Debe vaciar o desechar la mezcla terminada antes de poder transmitir una nueva orden de preparación.</span>
+              </div>
+            </div>
+          )}
+
           {/* Botón de Transmisión */}
           <Button
-            className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-semibold h-11 gap-2 shadow-lg shadow-cyan-950/20"
-            disabled={loading}
+            className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-semibold h-11 gap-2 shadow-lg shadow-cyan-950/20 disabled:opacity-50"
+            disabled={loading || isTankFull}
             onClick={handleTransmitirReceta}
           >
             <Play className="h-4 w-4 fill-current" />
-            🚀 Transmitir Receta al Sistema de Mezcla
+            {isTankFull ? "🚫 Bombo de Mezcla Ocupado (Vacíe antes de iniciar)" : "🚀 Transmitir Receta al Sistema de Mezcla"}
           </Button>
         </div>
       </DialogContent>

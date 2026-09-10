@@ -254,6 +254,17 @@ class DispositivoSCADAViewSet(viewsets.ModelViewSet):
             accion_path = "vaciar"
             payload_dict = {}
         elif comando_upper in ['MEZCLA']:
+            # Verificar si el bombo de mezcla aún tiene producto previo sin vaciar o desechar
+            tank_mezcla = models.UnidadAlmacenamiento.objects.filter(node_id='tank-3').first()
+            if tank_mezcla and tank_mezcla.capacidad and tank_mezcla.volumen_actual:
+                porc_actual = (tank_mezcla.volumen_actual / tank_mezcla.capacidad) * 100.0
+                if porc_actual > 5.0:
+                    return Response({
+                        'error': f'No se puede iniciar una nueva orden de mezcla: El bombo de mezcla contiene producto terminado ({round(tank_mezcla.volumen_actual, 1)}L, {round(porc_actual, 1)}%). Debe vaciar o desechar el contenido antes de iniciar una nueva mezcla.',
+                        'volumen_actual': tank_mezcla.volumen_actual,
+                        'porcentaje_actual': porc_actual
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
             accion_path = "mezcla"
             params = request.data.get('parametros', {})
             payload_dict = {
@@ -277,6 +288,13 @@ class DispositivoSCADAViewSet(viewsets.ModelViewSet):
                 modulo='SCADA',
                 objeto=dispositivo.numero_serie,
                 descripcion=f"Enviado comando '{accion_path}' (Topic: {topic_target}) a dispositivo {dispositivo.nombre}",
+                datos={
+                    'topico': topic_target,
+                    'comando': accion_path,
+                    'parametros': payload_dict,
+                    'dispositivo_id': dispositivo.id,
+                    'sistema_id': dispositivo.sistema_id
+                },
                 ip_origen=request.META.get('REMOTE_ADDR') or '127.0.0.1'
             )
             
@@ -309,8 +327,19 @@ class DispositivoSCADAViewSet(viewsets.ModelViewSet):
 
         if freno:
             accion_str = "freno_reposicion"
-            topic_target = f"{tenant}/{gateway}/{seccion_slug}/{sistema_slug}/freno_reposicion"
-            payload_dict = {}
+            topic_target = f"{tenant}/{gateway}/{seccion_slug}/{sistema_slug}/reposicion"
+            payload_dict = {
+                "freno": True,
+                "accion": "frenar",
+                "comando": "frenar"
+            }
+            # Publicar en el tópico directo y en los canales de freno compatibles
+            try:
+                _publish_mqtt_single(topic_target, payload_dict, f"django-backend-reposicion-{dispositivo.pk}")
+                _publish_mqtt_single(f"{tenant}/{gateway}/{seccion_slug}/{sistema_slug}/freno_reposicion", payload_dict, f"django-backend-freno-{dispositivo.pk}")
+                _publish_mqtt_single(f"{tenant}/{gateway}/{seccion_slug}/{sistema_slug}/comandos/control", {"accion": "frenar", "comando": "frenar"}, f"django-backend-cmd-freno-{dispositivo.pk}")
+            except Exception as e:
+                pass
         else:
             accion_str = "reposicion"
             topic_target = f"{tenant}/{gateway}/{seccion_slug}/{sistema_slug}/reposicion"
@@ -318,17 +347,22 @@ class DispositivoSCADAViewSet(viewsets.ModelViewSet):
                 "bombo": int(bombo),
                 "limite_porcentaje": int(limite_porcentaje)
             }
-
-        try:
-            # Publicar únicamente en el tópico objetivo directo
             _publish_mqtt_single(topic_target, payload_dict, f"django-backend-reposicion-{dispositivo.pk}")
 
+        try:
             models.RegistroAuditoria.objects.create(
                 usuario=request.user if request.user and request.user.is_authenticated else None,
-                accion='CONTROL_REPOSICION',
+                accion='CONTROL_REPOSICION' if not freno else 'FRENO_REPOSICION',
                 modulo='SCADA',
                 objeto=dispositivo.numero_serie,
                 descripcion=f"Acción '{accion_str}' enviada a {dispositivo.nombre} (Topic: {topic_target})",
+                datos={
+                    'topico': topic_target,
+                    'accion': accion_str,
+                    'parametros': payload_dict,
+                    'dispositivo_id': dispositivo.id,
+                    'sistema_id': dispositivo.sistema_id
+                },
                 ip_origen=request.META.get('REMOTE_ADDR') or '127.0.0.1'
             )
 
@@ -699,19 +733,60 @@ class RegistroAuditoriaViewSet(viewsets.ModelViewSet):
         # Filtros de módulo y acción manuales
         modulo = self.request.query_params.get('modulo')
         accion = self.request.query_params.get('accion')
+        sistema_id = self.request.query_params.get('sistema_id')
         if modulo:
             queryset = queryset.filter(modulo=modulo)
         if accion:
             queryset = queryset.filter(accion=accion)
+        if sistema_id and sistema_id != 'seleccionar':
+            try:
+                s_id = int(sistema_id)
+                queryset = queryset.filter(models.Q(datos__sistema_id=s_id) | models.Q(modulo__in=['SCADA', 'PRODUCCION']))
+            except (ValueError, TypeError):
+                queryset = queryset.filter(modulo__in=['SCADA', 'PRODUCCION'])
             
         return queryset
     
     def get_permissions(self):
         # Crear: cualquier usuario autenticado puede reportar una acción.
-        if self.action in ['create']:
+        if self.action in ['create', 'transmitir']:
             return [IsAuthenticated()]
         # List/retrieve: administradores y rangos autorizados de gestión
         return [IsAuthenticated(), CanViewAudit()]
+
+    @action(detail=False, methods=['post'])
+    def transmitir(self, request):
+        topico = request.data.get('topico')
+        payload = request.data.get('payload', {})
+        sistema_id = request.data.get('sistema_id')
+        origen = request.data.get('origen', 'Comando Manual Custom')
+        if not topico:
+            return Response({'error': 'Falta el campo topico'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            payload_dict = payload
+            if isinstance(payload, str):
+                try:
+                    payload_dict = json.loads(payload)
+                except Exception:
+                    payload_dict = {'raw': payload}
+            _publish_mqtt_single(topico, payload_dict, "django-backend-custom-cmd")
+            models.RegistroAuditoria.objects.create(
+                usuario=request.user if request.user and request.user.is_authenticated else None,
+                accion='COMANDO_CUSTOM',
+                modulo='SCADA',
+                objeto=topico,
+                descripcion=f"Transmitido comando a tópico {topico}",
+                datos={
+                    'topico': topico,
+                    'parametros': payload_dict,
+                    'sistema_id': sistema_id,
+                    'origen': origen
+                },
+                ip_origen=request.META.get('REMOTE_ADDR') or '127.0.0.1'
+            )
+            return Response({'status': 'Comando transmitido exitosamente', 'topico': topico})
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class SistemaViewSet(viewsets.ModelViewSet):
@@ -767,6 +842,12 @@ class SistemaViewSet(viewsets.ModelViewSet):
                 modulo="SCADA",
                 objeto=sistema.nombre,
                 descripcion=f"Enviada acción '{comando_upper}' al sistema {sistema.nombre} vía MQTT topic {topic_action}",
+                datos={
+                    'topico': topic_action,
+                    'comando': comando_upper,
+                    'parametros': payload,
+                    'sistema_id': sistema.id
+                },
                 ip_origen=request.META.get('REMOTE_ADDR') or '127.0.0.1'
             )
             return Response({
@@ -788,6 +869,17 @@ class PlantillaProduccionViewSet(viewsets.ModelViewSet):
     def ejecutar(self, request, pk=None):
         plantilla = self.get_object()
         sistema_id = request.data.get('sistema_id')
+
+        # Bloquear si el bombo de mezcla aún contiene producto previo sin vaciar o desechar
+        tank_mezcla = models.UnidadAlmacenamiento.objects.filter(node_id='tank-3').first()
+        if tank_mezcla and tank_mezcla.capacidad and tank_mezcla.volumen_actual:
+            porc_actual = (tank_mezcla.volumen_actual / tank_mezcla.capacidad) * 100.0
+            if porc_actual > 5.0:
+                return Response({
+                    'error': f'No se puede ejecutar la receta de mezcla: El bombo de mezcla contiene producto ({round(tank_mezcla.volumen_actual, 1)}L, {round(porc_actual, 1)}%). Debe vaciar o desechar el contenido antes de iniciar.',
+                    'volumen_actual': tank_mezcla.volumen_actual,
+                    'porcentaje_actual': porc_actual
+                }, status=status.HTTP_400_BAD_REQUEST)
         
         tenant = "scada"
         gateway = "gw1"
@@ -840,7 +932,13 @@ class PlantillaProduccionViewSet(viewsets.ModelViewSet):
                 accion='EJECUCION_PLANTILLA',
                 modulo='PRODUCCION',
                 objeto=plantilla.nombre,
-                descripcion=f"Ejecutada plantilla '{plantilla.nombre}' ({plantilla.tipo}) en sistema {sistema_slug}",
+                descripcion=f"Ejecutada plantilla '{plantilla.nombre}' ({plantilla.tipo}) en sistema {sistema_slug} (Topic: {topic_action})",
+                datos={
+                    'topico': topic_action,
+                    'comando': 'MEZCLA',
+                    'parametros': payload_mezcla,
+                    'sistema_id': sistema_id
+                },
                 ip_origen=request.META.get('REMOTE_ADDR') or '127.0.0.1'
             )
 

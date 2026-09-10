@@ -220,12 +220,21 @@ const VisualizacionSCADA = () => {
         const list = Array.isArray(data) ? data : data.results || [];
         if (list.length > 0) {
           const item = list[0];
+          const rawParams = item.datos?.parametros || item.parametros || item.detalles || item.payload_json || item.datos;
+          const formattedParams = typeof rawParams === 'object'
+            ? JSON.stringify(rawParams, null, 2)
+            : String(rawParams || "{}");
+
+          const userDisplay = item.usuario_username || (typeof item.usuario === 'string' ? item.usuario : (item.usuario ? `Usuario #${item.usuario}` : "Operador SCADA"));
+          const topicDisplay = item.topico || item.datos?.topico || item.datos?.topic || "N/A";
+
           setUltimaTransmision({
-            origen: item.origen || (item.comando?.includes("Receta") ? "Receta Programada" : "Comando Manual"),
+            origen: item.origen || (item.accion?.includes("PLANTILLA") || item.accion?.includes("RECETA") ? "Receta Programada" : "Comando Manual"),
             tipoOperacion: item.accion || item.comando || "Comando MQTT",
-            usuario: item.usuario || "Operador SCADA",
+            usuario: userDisplay,
+            topico: topicDisplay,
             timestamp: item.timestamp ? new Date(item.timestamp).toLocaleString("es-AR") : new Date().toLocaleString("es-AR"),
-            descripcion: item.detalles || item.payload_json || JSON.stringify(item.parametros || {}),
+            descripcion: formattedParams,
           });
         } else {
           setUltimaTransmision(null);
@@ -760,6 +769,12 @@ const VisualizacionSCADA = () => {
                         <div className="flex justify-between items-center">
                           <span className="text-muted-foreground">Fecha / Hora:</span>
                           <span className="font-mono text-muted-foreground">{ultimaTransmision.timestamp}</span>
+                        </div>
+                        <div className="flex flex-col gap-1 pt-2 border-t border-border/50">
+                          <span className="text-muted-foreground text-[11px] font-medium">Último Tópico Transmitido:</span>
+                          <span className="font-mono text-[11px] text-cyan-400 break-all bg-muted/70 p-2 rounded border border-cyan-800/40 select-all font-semibold">
+                            {ultimaTransmision.topico || "N/A"}
+                          </span>
                         </div>
                       </div>
 
