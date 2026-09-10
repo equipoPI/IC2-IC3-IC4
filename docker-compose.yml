@@ -50,6 +50,7 @@ services:
 
   # Worker de MQTT en segundo plano
   mqtt_worker:
+    image: ic2-ic3-backend
     build:
       context: ./mysite
       dockerfile: Dockerfile

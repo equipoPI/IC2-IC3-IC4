@@ -191,12 +191,12 @@ void setup() {
   // CONFIGURACIÓN PINES SENSORES ULTRASÓNICOS (NIVEL)
   // ============================================================
   
-  pinMode(17, INPUT);   // Echo
-  pinMode(19, INPUT);
-  pinMode(21, INPUT);
-  pinMode(16, OUTPUT);  // Trigger
-  pinMode(18, OUTPUT);
-  pinMode(20, OUTPUT);
+  pinMode(17, INPUT);   // Echo Bombo 2
+  pinMode(19, INPUT);   // Echo Bombo Mezcla (3)
+  pinMode(21, INPUT);   // Echo Bombo 1
+  pinMode(16, OUTPUT);  // Trigger Bombo 2
+  pinMode(18, OUTPUT);  // Trigger Bombo Mezcla (3)
+  pinMode(20, OUTPUT);  // Trigger Bombo 1
 
   // ============================================================
   // CONFIGURACIÓN PINES ACTUADORES
@@ -277,18 +277,25 @@ void loop() {
     tiempoMonitoreo = millis();
   }
 
-  // Control de nivel de depósitos temporizado (cada 100 ms para evitar solapamiento de ecos)
+  // ============================================================
+  // SELECCIÓN DE MODO DE MEDICIÓN DE NIVEL:
+  // ============================================================
+
+  // ---> MODO 1: FUNCIONAL CON FILTRO (Normal) <---
+  /*
   if ((tiempoLecturaNivel + INTERVALO_LECTURA_NIVEL) <= millis()) {
     nivel();      // Lee los 3 sensores ultrasónicos con pausas entre ellos
-    filtrado();   // Aplica filtrado estadístico
+    filtrado();   // Aplica filtrado estadístico y suavizado
     tiempoLecturaNivel = millis();
   }
-
-  // Envío de datos a Raspberry Pi cada 1 segundo
   if ((tiempoEnvio + 1000) <= millis()) {
     enviarValores();
     tiempoEnvio = millis();
-  }
+  }*/
+
+  // ---> MODO 2: CALIBRACIÓN DIRECTA SIN FILTRO (Pruebas) <---
+  // Para usar: comenta el bloque MODO 1 de arriba y descomenta la siguiente línea:
+  calibracionNivelDirecto();
 
   // Control de procesos
   activacion();  // Control de bombas de reposición y mezcla
@@ -324,28 +331,29 @@ void nivel() {
     }
     
     // Mapeo ordenado con el conexionado físico documentado:
-    // i = 0 -> Pines 16 (Trig) y 17 (Echo) = Bombo 1
-    // i = 1 -> Pines 18 (Trig) y 19 (Echo) = Bombo 2
-    // i = 2 -> Pines 20 (Trig) y 21 (Echo) = Bombo Mezcla (3)
+    // i = 0 -> Pines 16 (Trig) y 17 (Echo) = Bombo 2
+    // i = 1 -> Pines 18 (Trig) y 19 (Echo) = Bombo mezcla (3)
+    // i = 2 -> Pines 20 (Trig) y 21 (Echo) = Bombo 1
     if (i == 0) {
-      distancia1 = distancia;
-    }
-    if (i == 1) {
       distancia2 = distancia;
     }
-    if (i == 2) {
+    if (i == 1) {
       distancia3 = distancia;
+    }
+    if (i == 2) {
+      distancia1 = distancia;
     }
     
     trig = trig + 2;
     eco = eco + 2;
     i = i + 1;
 
-    // Pausa de 15 ms entre sensores para permitir la extinción de rebotes acústicos residuales
-    delay(15);
+    // Pausa de 30 ms entre sensores para permitir la extinción de rebotes acústicos residuales
+    delay(30);
   }
   
   // Resetear variables para próxima lectura
+  distancia = 0;
   i = 0;
   trig = 16;
   eco = 17;
@@ -431,6 +439,65 @@ void filtrado() {
   constrainedPorcentaje1 = constrain(Fporcentaje1, 0.0, 100.0);
   constrainedPorcentaje2 = constrain(Fporcentaje2, 0.0, 100.0);
   constrainedPorcentaje3 = constrain(Fporcentaje3, 0.0, 100.0);
+}
+
+
+// ============================================================
+// FUNCIÓN: calibracionNivelDirecto()
+// Descripción: MODO DE PRUEBA Y CALIBRACIÓN DIRECTA (SIN FILTRO)
+// Lee los 3 sensores ultrasónicos y envía inmediatamente el dato
+// crudo (RAW) a la Raspberry Pi tal como lo mide el sensor,
+// sin promedios, sin filtro exponencial ALPHA y sin retención de última válida.
+// Si un sensor da timeout, se verá 0.0 cm de inmediato para diagnosticar fallas.
+// ============================================================
+
+void calibracionNivelDirecto() {
+  static unsigned long tiempoEnvioCal = 0;
+  if ((tiempoEnvioCal + 300) > millis()) {
+    return; // Envío cada 300 ms (tiempo real ágil sin saturar el puerto serial)
+  }
+  tiempoEnvioCal = millis();
+
+  int trigCal = 16;
+  int ecoCal = 17;
+
+  for (int idx = 0; idx < 3; idx++) {
+    digitalWrite(trigCal, LOW);
+    delayMicroseconds(2);
+    digitalWrite(trigCal, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trigCal, LOW);
+
+    duracion = pulseIn(ecoCal, HIGH, 23200);
+    float distCruda = duracion / 58.2;
+
+    // Mapeo ordenado con el conexionado físico documentado:
+    // idx = 0 -> Pines 16 (Trig) y 17 (Echo) = Bombo 2
+    // idx = 1 -> Pines 18 (Trig) y 19 (Echo) = Bombo mezcla (3)
+    // idx = 2 -> Pines 20 (Trig) y 21 (Echo) = Bombo 1
+    if (idx == 0) {
+      distancia2 = distCruda;
+      average2 = distCruda;
+      constrainedPorcentaje2 = constrain((30.0 - distCruda) * 100.0 / (30.0 - 4.0), 0.0, 100.0);
+    }
+    if (idx == 1) {
+      distancia3 = distCruda;
+      average3 = distCruda;
+      constrainedPorcentaje3 = constrain((30.0 - distCruda) * 100.0 / (30.0 - 4.0), 0.0, 100.0);
+    }
+    if (idx == 2) {
+      distancia1 = distCruda;
+      average1 = distCruda;
+      constrainedPorcentaje1 = constrain((30.0 - distCruda) * 100.0 / (30.0 - 4.0), 0.0, 100.0);
+    }
+
+    trigCal += 2;
+    ecoCal += 2;
+    delay(30); // Pausa de 30 ms para disipar rebotes acústicos entre sensores
+  }
+
+  // Envío INMEDIATO del paquete CSV completo tal como lo espera la Raspberry Pi
+  enviarValores();
 }
 
 
