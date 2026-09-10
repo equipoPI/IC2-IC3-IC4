@@ -39,7 +39,7 @@ float pulsosnecesarios = 450.0;
 
 // Porcentaje de corte de nivel para vaciado y desecho (%)
 // El bombo queda suspendido en el líquido y nunca se vacía completamente
-float PORCENTAJE_CORTE_VACIADO = 10.0;
+float PORCENTAJE_CORTE_VACIADO = 5.0;
 
 // ============================================================
 // VARIABLES GLOBALES - TEMPORIZACIÓN
@@ -319,8 +319,8 @@ void nivel() {
     delayMicroseconds(10);
     digitalWrite(trig, LOW);
     
-    // pulseIn con timeout de 23200 microsegundos (~4 metros máximo)
-    duracion = pulseIn(eco, HIGH, 23200);
+    // pulseIn con timeout de 5000 microsegundos (~86 cm máximo para evitar bloqueos)
+    duracion = pulseIn(eco, HIGH, 5000);
     
     // Validar que la medición sea válida (2-30 cm = rango de operación)
     distancia = duracion / 58.2;  // Conversión a cm
@@ -430,10 +430,10 @@ void filtrado() {
     smoothed3 = smoothed3 + ALPHA * (average3 - smoothed3);
   }
 
-  // Mapear distancia suavizada a porcentaje continuo con flotantes (30.0cm = vacío, 4.0cm = lleno)
-  Fporcentaje1 = (30.0 - smoothed1) * 100.0 / (30.0 - 4.0);
-  Fporcentaje2 = (30.0 - smoothed2) * 100.0 / (30.0 - 4.0);
-  Fporcentaje3 = (30.0 - smoothed3) * 100.0 / (30.0 - 4.0);
+  // Mapear distancia suavizada a porcentaje continuo con flotantes (28.0cm = vacío, 4.0cm = lleno)
+  Fporcentaje1 = (28.0 - smoothed1) * 100.0 / (28.0 - 4.0);
+  Fporcentaje2 = (28.0 - smoothed2) * 100.0 / (28.0 - 4.0);
+  Fporcentaje3 = (28.0 - smoothed3) * 100.0 / (28.0 - 4.0);
 
   // Limitar el valor para que no se pase de 0.0-100.0
   constrainedPorcentaje1 = constrain(Fporcentaje1, 0.0, 100.0);
@@ -468,7 +468,7 @@ void calibracionNivelDirecto() {
     delayMicroseconds(10);
     digitalWrite(trigCal, LOW);
 
-    duracion = pulseIn(ecoCal, HIGH, 23200);
+    duracion = pulseIn(ecoCal, HIGH, 5000);
     float distCruda = duracion / 58.2;
 
     // Mapeo ordenado con el conexionado físico documentado:
@@ -478,17 +478,17 @@ void calibracionNivelDirecto() {
     if (idx == 0) {
       distancia2 = distCruda;
       average2 = distCruda;
-      constrainedPorcentaje2 = constrain((30.0 - distCruda) * 100.0 / (30.0 - 4.0), 0.0, 100.0);
+      constrainedPorcentaje2 = constrain((28.0 - distCruda) * 100.0 / (28.0 - 4.0), 0.0, 100.0);
     }
     if (idx == 1) {
       distancia3 = distCruda;
       average3 = distCruda;
-      constrainedPorcentaje3 = constrain((30.0 - distCruda) * 100.0 / (30.0 - 4.0), 0.0, 100.0);
+      constrainedPorcentaje3 = constrain((28.0 - distCruda) * 100.0 / (28.0 - 4.0), 0.0, 100.0);
     }
     if (idx == 2) {
       distancia1 = distCruda;
       average1 = distCruda;
-      constrainedPorcentaje1 = constrain((30.0 - distCruda) * 100.0 / (30.0 - 4.0), 0.0, 100.0);
+      constrainedPorcentaje1 = constrain((28.0 - distCruda) * 100.0 / (28.0 - 4.0), 0.0, 100.0);
     }
 
     trigCal += 2;
@@ -763,6 +763,8 @@ void activacion() {
     cantidad1 = 0;
     liquido2 = 0;
     cantidad2 = 0;
+    waterFlow1 = 0;
+    waterFlow2 = 0;
 
     // Corte automático por porcentaje de nivel
     if (constrainedPorcentaje3 <= PORCENTAJE_CORTE_VACIADO) {
@@ -781,6 +783,8 @@ void activacion() {
     cantidad1 = 0;
     liquido2 = 0;
     cantidad2 = 0;
+    waterFlow1 = 0;
+    waterFlow2 = 0;
 
     // Corte automático por porcentaje de nivel
     if (constrainedPorcentaje3 <= PORCENTAJE_CORTE_VACIADO) {
