@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import apiFetch from "@/lib/api";
+import { useScadaWebSocket } from "@/hooks/useScadaWebSocket";
 import { RefreshCw, Play, Droplet, ShieldAlert, Settings2 } from "lucide-react";
 
 interface ControlReposicionModalProps {
@@ -33,6 +34,7 @@ export function ControlReposicionModal({
   const [selectedDispositivo, setSelectedDispositivo] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
+  const { sendScadaCommand } = useScadaWebSocket();
 
   const getItemId = (item: any) => String(item?.id || item?.numero_serie || item?.pk || "");
 
@@ -108,28 +110,39 @@ export function ControlReposicionModal({
       const activeDev = getActiveDevice();
       const fallbackDev = (dispositivos.length > 0 && getItemId(dispositivos[0])) ? getItemId(dispositivos[0]) : "bomba_reposicion";
       const targetId = selectedDispositivo || (activeDev ? getItemId(activeDev) : dispositivoId) || fallbackDev;
+      const targetTopic = buildTopic();
 
-      const res = await apiFetch(`/api/v1/dispositivos/${targetId}/reposicion/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bombo: parseInt(bombo),
-          limite_porcentaje: limitePorcentaje,
-          freno: false,
-        }),
+      const payload = {
+        bombo: parseInt(bombo),
+        limite_porcentaje: limitePorcentaje,
+        freno: false,
+        topico: targetTopic,
+        dispositivo_id: targetId,
+        sistema_nombre: sistemaNombre,
+        seccion_nombre: seccionNombre,
+        planta_nombre: plantaNombre,
+      };
+
+      const result = await sendScadaCommand({
+        action: "reposicion",
+        payload,
+        fallbackHttp: {
+          endpoint: `/api/v1/dispositivos/${targetId}/reposicion/`,
+          method: "POST",
+          body: payload,
+        },
       });
 
-      if (res.ok) {
+      if (result.ok) {
         toast({
           title: "✅ Orden de Reposición Enviada",
-          description: `Se inició la reposición hacia el Bombo ${bombo} (Tanque ${bombo === "1" ? "A" : "B"}) hasta el ${limitePorcentaje}% (Comando R enviado)`,
+          description: `Reposición hacia Bombo ${bombo} al ${limitePorcentaje}% enviada (${result.source === "websocket" ? "⚡ WebSocket <15ms" : "HTTP REST"})`,
         });
         onOpenChange(false);
       } else {
-        const errorData = await res.json().catch(() => ({}));
         toast({
           title: "Error al enviar orden",
-          description: errorData.error || errorData.detail || "No se pudo comunicar la reposición con el servidor",
+          description: result.error || "No se pudo comunicar la reposición con el servidor",
           variant: "destructive",
         });
       }
@@ -146,23 +159,32 @@ export function ControlReposicionModal({
       const activeDev = getActiveDevice();
       const fallbackDev = (dispositivos.length > 0 && getItemId(dispositivos[0])) ? getItemId(dispositivos[0]) : "bomba_reposicion";
       const targetId = selectedDispositivo || (activeDev ? getItemId(activeDev) : dispositivoId) || fallbackDev;
+      const targetTopic = buildTopic();
 
-      const res = await apiFetch(`/api/v1/dispositivos/${targetId}/reposicion/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          freno: true,
-          accion: "frenar",
-          comando: "frenar",
-          bombo: 0,
-          limite_porcentaje: 0,
-        }),
+      const payload = {
+        freno: true,
+        accion: "frenar",
+        comando: "frenar",
+        bombo: 0,
+        limite_porcentaje: 0,
+        topico: targetTopic,
+        dispositivo_id: targetId,
+      };
+
+      const result = await sendScadaCommand({
+        action: "reposicion",
+        payload,
+        fallbackHttp: {
+          endpoint: `/api/v1/dispositivos/${targetId}/reposicion/`,
+          method: "POST",
+          body: payload,
+        },
       });
 
-      if (res.ok) {
+      if (result.ok) {
         toast({
           title: "🚨 FRENO DE EMERGENCIA ACTIVADO",
-          description: "Se envió la parada inmediata de la Bomba de Reposición y Electroválvulas (Comando F enviado)",
+          description: `Parada inmediata enviada (${result.source === "websocket" ? "⚡ WebSocket instantáneo" : "HTTP REST"})`,
           variant: "destructive",
         });
         onOpenChange(false);

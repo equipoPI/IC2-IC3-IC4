@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import apiFetch from "@/lib/api";
+import { useScadaWebSocket } from "@/hooks/useScadaWebSocket";
 import { FlaskConical, Play, Clock, Droplet, Settings2, FileText, AlertTriangle } from "lucide-react";
 
 interface ControlRecetaLiquidosModalProps {
@@ -38,6 +39,7 @@ export function ControlRecetaLiquidosModal({
   const [selectedPlantilla, setSelectedPlantilla] = useState<string>("");
   const [selectedDispositivo, setSelectedDispositivo] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
+  const { sendScadaCommand } = useScadaWebSocket();
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
   const [unidadMedida, setUnidadMedida] = useState<"L" | "mL">("L");
   const [modoCarga, setModoCarga] = useState<"plantilla" | "manual">("manual");
@@ -151,36 +153,43 @@ export function ControlRecetaLiquidosModal({
       const activeDev = getActiveDevice();
       const fallbackDev = (dispositivos.length > 0 && getItemId(dispositivos[0])) ? getItemId(dispositivos[0]) : "bomba_mezcla";
       const targetId = selectedDispositivo || (activeDev ? getItemId(activeDev) : dispositivoId) || fallbackDev;
+      const targetTopic = getTopicPreview();
 
-      const payload = {
+      const payloadObj = {
         accion: "MEZCLA",
+        comando: "MEZCLA",
         liquido_1: liquido1,
         liquido_2: liquido2,
         hora: hora,
         minuto: minuto,
-        timestamp: new Date().toISOString()
+        topico: targetTopic,
+        dispositivo_id: targetId,
+        timestamp: new Date().toISOString(),
       };
 
-      const res = await apiFetch(`/api/v1/dispositivos/${targetId}/control/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          comando: "MEZCLA",
-          parametros: payload
-        }),
+      const result = await sendScadaCommand({
+        action: "receta",
+        payload: payloadObj,
+        fallbackHttp: {
+          endpoint: `/api/v1/dispositivos/${targetId}/control/`,
+          method: "POST",
+          body: {
+            comando: "MEZCLA",
+            parametros: payloadObj,
+          },
+        },
       });
 
-      if (res.ok) {
+      if (result.ok) {
         toast({
           title: "🧪 Receta de Líquidos Transmitida",
-          description: `Ingrediente 1: ${liquido1}L | Ingrediente 2: ${liquido2}L | Tiempo: ${hora}h ${minuto}m (Tópico MQTT enviado)`,
+          description: `Ing. 1: ${liquido1}L | Ing. 2: ${liquido2}L | Tiempo: ${hora}h ${minuto}m (${result.source === "websocket" ? "⚡ WebSocket <15ms" : "HTTP REST"})`,
         });
         onOpenChange(false);
       } else {
-        const errorData = await res.json().catch(() => ({}));
         toast({
           title: "Error al transmitir receta",
-          description: errorData.error || errorData.detail || "No se pudo comunicar con el servidor SCADA",
+          description: result.error || "No se pudo comunicar con el servidor SCADA",
           variant: "destructive",
         });
       }

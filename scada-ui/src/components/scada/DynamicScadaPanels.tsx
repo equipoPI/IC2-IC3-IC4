@@ -8,6 +8,7 @@ import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import apiFetch from "@/lib/api";
+import { useScadaWebSocket } from "@/hooks/useScadaWebSocket";
 import { MapeoAccion } from "@/components/scada/GestorComandosModal";
 import { Sliders, Play, FlaskConical, Send, Settings, Sparkles, SlidersHorizontal, Hash, Box, Edit, Trash2, CheckCircle2 } from "lucide-react";
 
@@ -37,6 +38,7 @@ export function DynamicScadaPanels({
   const [mapeos, setMapeos] = useState<MapeoAccion[]>([]);
   const [recetasPlantillas, setRecetasPlantillas] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const { sendScadaCommand } = useScadaWebSocket();
 
   // Parameter values per control: controlId -> { paramName: value }
   const [paramValues, setParamValues] = useState<Record<string | number, Record<string, any>>>({});
@@ -298,28 +300,33 @@ export function DynamicScadaPanels({
         payloadStr = payloadStr.replace(/\{[a-zA-Z0-9_]+\}/g, String(singleVal));
       }
 
-      const resp = await apiFetch("/api/v1/auditoria/transmitir/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          topico: topic,
-          payload: payloadStr,
-          sistema_id: selectedSistemaId,
-          origen: `Panel Dinámico: ${m.nombre}`,
-        }),
+      const payloadObj = {
+        topico: topic,
+        payload: payloadStr,
+        sistema_id: selectedSistemaId,
+        origen: `Panel Dinámico: ${m.nombre}`,
+      };
+
+      const result = await sendScadaCommand({
+        action: "transmitir",
+        payload: payloadObj,
+        fallbackHttp: {
+          endpoint: "/api/v1/auditoria/transmitir/",
+          method: "POST",
+          body: payloadObj,
+        },
       });
 
-      if (resp.ok) {
+      if (result.ok) {
         toast({
           title: `🚀 ${m.nombre} Enviado`,
-          description: `Tópico: ${topic} | Payload: ${payloadStr}`,
+          description: `Tópico: ${topic} | ${result.source === "websocket" ? "⚡ WebSocket <10ms" : "HTTP REST"}`,
         });
         if (onCommandExecuted) onCommandExecuted();
       } else {
-        const errData = await resp.json().catch(() => ({}));
         toast({
           title: "❌ Error publicando MQTT",
-          description: JSON.stringify(errData),
+          description: result.error || "Error al transmitir comando",
           variant: "destructive",
         });
       }
