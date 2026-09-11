@@ -296,30 +296,35 @@ const VisualizacionSCADA = () => {
   // Transmitir un comando personalizado desde los mapeos MQTT
   const handleCustomCommandClick = async (cmd: any) => {
     try {
-      toast.info(`Publicando comando '${cmd.nombre_accion || cmd.nombre}'...`);
-      const resp = await apiFetch("/api/v1/auditoria/transmitir/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          topico: cmd.plantilla_topico,
-          payload: cmd.plantilla_payload_json,
-          sistema_id: selectedSistema !== 'seleccionar' ? selectedSistema : undefined,
-          origen: "Comando Manual Custom"
-        }),
+      const payloadObj = {
+        topico: cmd.plantilla_topico,
+        payload: cmd.plantilla_payload_json,
+        sistema_id: selectedSistema !== 'seleccionar' ? selectedSistema : undefined,
+        origen: "Comando Manual Custom",
+      };
+
+      const result = await sendScadaCommand({
+        action: "transmitir",
+        payload: payloadObj,
+        fallbackHttp: {
+          endpoint: "/api/v1/auditoria/transmitir/",
+          method: "POST",
+          body: payloadObj,
+        },
       });
 
-      if (resp.ok) {
-        toast.success(`Comando '${cmd.nombre}' publicado correctamente por MQTT`);
+      if (result.ok) {
+        toast.success(`Comando '${cmd.nombre}' enviado (${result.source === 'websocket' ? '⚡ WS <10ms' : 'HTTP REST'})`);
         loadUltimaTransmision();
       } else {
-        toast.error(`Error al transmitir comando '${cmd.nombre}'`);
+        toast.error(`Error al transmitir comando '${cmd.nombre}': ${result.error || ''}`);
       }
     } catch (e) {
       toast.error("Error de comunicación al transmitir comando MQTT");
     }
   };
 
-  const { isConnected: isWsConnected } = useScadaWebSocket({
+  const { isConnected: isWsConnected, sendScadaCommand } = useScadaWebSocket({
     onMessage: (data) => {
       console.log("[VisualizacionSCADA] Evento WebSocket recibido:", data);
       loadDispositivos();
@@ -377,28 +382,32 @@ const VisualizacionSCADA = () => {
     if (!comando) return;
 
     try {
-      toast.info(`Enviando comando '${actionLabel}'...`);
-      let resp;
-      if (deviceId === 'proceso' && selectedSistema !== 'todas') {
-        resp = await apiFetch(`/api/v1/sistemas/${selectedSistema}/control/`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ comando }),
-        });
-      } else {
-        resp = await apiFetch(`/api/v1/dispositivos/${deviceId}/control/`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ comando }),
-        });
-      }
+      const isSystem = deviceId === 'proceso' && selectedSistema !== 'todas';
+      const fallbackEndpoint = isSystem
+        ? `/api/v1/sistemas/${selectedSistema}/control/`
+        : `/api/v1/dispositivos/${deviceId}/control/`;
 
-      if (resp.ok) {
-        toast.success(`Comando '${actionLabel}' publicado exitosamente en el bus MQTT`);
+      const result = await sendScadaCommand({
+        action: "control",
+        payload: {
+          dispositivo_id: deviceId,
+          sistema_id: selectedSistema,
+          comando,
+          accion: comando,
+        },
+        fallbackHttp: {
+          endpoint: fallbackEndpoint,
+          method: "POST",
+          body: { comando },
+        },
+      });
+
+      if (result.ok) {
+        toast.success(`Comando '${actionLabel}' ejecutado (${result.source === 'websocket' ? '⚡ WS <15ms' : 'HTTP REST'})`);
         loadDispositivos();
+        loadUltimaTransmision();
       } else {
-        const errData = await resp.json().catch(() => ({}));
-        toast.error(`Error al enviar comando: ${errData.error || resp.statusText}`);
+        toast.error(`Error al enviar comando: ${result.error || "Fallo en la comunicación"}`);
       }
     } catch (e) {
       toast.error("Error de conexión al comunicarse con la API SCADA");
