@@ -538,6 +538,8 @@ class DispositivoSCADA(models.Model):
     fecha_instalacion = models.DateField(default=now)
     creado_el = models.DateTimeField(auto_now_add=True)
     ultima_lectura = models.DateTimeField(null=True, blank=True)
+    valor_lectura = models.FloatField(null=True, blank=True, help_text="Último valor medido")
+    unidad_lectura = models.CharField(max_length=20, default="N/A", blank=True, help_text="Unidad de medida")
     descripcion = models.TextField(blank=True, null=True)
 
     class Meta:

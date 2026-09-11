@@ -10,6 +10,7 @@ from django.middleware.csrf import get_token
 from django.contrib.auth.models import User
 from allauth.account.models import EmailConfirmation, EmailAddress
 
+from django.db.models import Q
 # --- Importaciones de Django REST Framework ---
 from rest_framework import status, viewsets, permissions, generics
 from rest_framework.decorators import api_view, permission_classes, action
@@ -45,23 +46,28 @@ def _clean_topic_segment(val):
     return str(val).lower().replace('.', '').replace(' ', '_').replace('-', '_').strip()
 
 
-def _publish_mqtt_single(topic, payload, client_id_prefix="django-backend"):
-    """
-    Publica un mensaje MQTT en Mosquitto utilizando autenticación activa si está configurada,
-    o credenciales predeterminadas ('admin'/'admin') para Mosquitto con allow_anonymous false.
-    Se ejecuta de forma asíncrona en un hilo en segundo plano para evitar bloquear la respuesta HTTP.
-    """
-    import threading
+import threading
+import time
+import paho.mqtt.client as paho_mqtt
 
-    def _do_publish():
+_mqtt_client_singleton = None
+_mqtt_client_lock = threading.Lock()
+
+def _get_persistent_mqtt_client():
+    global _mqtt_client_singleton
+    if _mqtt_client_singleton is not None and getattr(_mqtt_client_singleton, '_is_connected', False):
+        return _mqtt_client_singleton
+
+    with _mqtt_client_lock:
+        if _mqtt_client_singleton is not None and getattr(_mqtt_client_singleton, '_is_connected', False):
+            return _mqtt_client_singleton
+
         try:
-            import paho.mqtt.publish as publish
-            import time
-
             config = ConfiguracionMQTT.objects.filter(activo=True).first()
             broker_url = "mosquitto"
             puerto = 1883
-            auth = None
+            usuario = "admin"
+            password = "admin"
 
             if config:
                 if config.broker_url:
@@ -69,25 +75,55 @@ def _publish_mqtt_single(topic, payload, client_id_prefix="django-backend"):
                 if config.puerto:
                     puerto = config.puerto
                 if config.usuario and config.password:
-                    auth = {'username': config.usuario, 'password': config.password}
+                    usuario = config.usuario
+                    password = config.password
 
-            if not auth:
-                auth = {'username': 'admin', 'password': 'admin'}
+            client = paho_mqtt.Client(client_id=f"django-fast-{int(time.time() * 1000) % 100000}")
+            client.username_pw_set(usuario, password)
 
+            def on_connect(c, userdata, flags, rc):
+                c._is_connected = (rc == 0)
+
+            def on_disconnect(c, userdata, rc):
+                c._is_connected = False
+
+            client.on_connect = on_connect
+            client.on_disconnect = on_disconnect
+            try:
+                client.connect(broker_url, puerto, keepalive=60)
+                client._is_connected = True
+            except Exception:
+                client.connect_async(broker_url, puerto, keepalive=60)
+            client.loop_start()
+            _mqtt_client_singleton = client
+            return client
+        except Exception as ex:
+            logging.getLogger('scada').error(f"Error inicializando cliente MQTT persistente: {ex}")
+            return None
+
+
+def _publish_mqtt_single(topic, payload, client_id_prefix="django-backend"):
+    """
+    Publica un mensaje MQTT instantáneamente usando un cliente persistente,
+    sin overhead de handshake TCP ni delays de socket.
+    """
+    def _do_publish():
+        try:
             payload_str = json.dumps(payload) if isinstance(payload, (dict, list)) else str(payload)
-            client_id = f"{client_id_prefix}-{int(time.time() * 1000)}"
+            client = _get_persistent_mqtt_client()
+            if client:
+                client.publish(topic, payload_str, qos=0)
+                return
 
-            kwargs = {
-                'topic': topic,
-                'payload': payload_str,
-                'hostname': broker_url,
-                'port': puerto,
-                'client_id': client_id
-            }
-            if auth:
-                kwargs['auth'] = auth
-
-            publish.single(**kwargs)
+            import paho.mqtt.publish as publish
+            publish.single(
+                topic=topic,
+                payload=payload_str,
+                hostname="mosquitto",
+                port=1883,
+                auth={'username': 'admin', 'password': 'admin'},
+                client_id=f"{client_id_prefix}-{int(time.time() * 1000)}"
+            )
         except Exception as e:
             import logging
             logging.getLogger('scada').error(f"Error publicando mensaje MQTT a {topic}: {e}")
@@ -183,11 +219,13 @@ class DispositivoSCADAViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     def perform_destroy(self, instance):
-        # Limpiar lecturas y registros vinculados para evitar IntegrityError por Foreign Key
-        instance.lecturas.all().delete()
-        instance.variables_vinculadas.all().delete()
-        models.ComunicacionMQTT.objects.filter(dispositivo=instance.numero_serie).delete()
-        instance.delete()
+        # Limpiar lecturas y registros vinculados en lote con SQL directo para respuesta instantánea (<10ms)
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM polls_lecturasensor WHERE dispositivo_id = %s", [instance.pk])
+            cursor.execute("DELETE FROM polls_variablesistema WHERE dispositivo_id = %s", [instance.pk])
+            cursor.execute("DELETE FROM polls_comunicacionmqtt WHERE dispositivo = %s", [instance.numero_serie])
+            cursor.execute("DELETE FROM polls_dispositivoscada WHERE id = %s", [instance.pk])
 
     def _get_dispositivo(self, pk):
         if not pk:
@@ -243,16 +281,16 @@ class DispositivoSCADAViewSet(viewsets.ModelViewSet):
         accion_path = _clean_topic_segment(comando_upper)
         if comando_upper in ['ABRIR', 'INICIAR', 'CONTINUAR', 'REANUDAR']:
             accion_path = "reanudar"
-            payload_dict = {}
+            payload_dict = {"accion": "reanudar", "comando": "reanudar"}
         elif comando_upper in ['CERRAR', 'DETENER', 'PARAR', 'PAUSAR']:
             accion_path = "detener"
-            payload_dict = {}
+            payload_dict = {"accion": "detener", "comando": "detener"}
         elif comando_upper in ['DESECHAR', 'DESCARTAR']:
             accion_path = "desechar"
-            payload_dict = {}
+            payload_dict = {"accion": "desechar", "comando": "desechar"}
         elif comando_upper in ['VACIAR']:
             accion_path = "vaciar"
-            payload_dict = {}
+            payload_dict = {"accion": "vaciar", "comando": "vaciar"}
         elif comando_upper in ['MEZCLA']:
             # Verificar si el bombo de mezcla aún tiene producto previo sin vaciar o desechar
             tank_mezcla = models.UnidadAlmacenamiento.objects.filter(node_id='tank-3').first()
@@ -271,16 +309,22 @@ class DispositivoSCADAViewSet(viewsets.ModelViewSet):
                 "liquido_1": int(params.get('liquido_1', 50)),
                 "liquido_2": int(params.get('liquido_2', 30)),
                 "hora": int(params.get('hora', 0)),
-                "minuto": int(params.get('minuto', 15))
+                "minuto": int(params.get('minuto', 15)),
+                "accion": "mezcla"
             }
         else:
             payload_dict = request.data.get('parametros', {})
+            if isinstance(payload_dict, dict) and 'accion' not in payload_dict:
+                payload_dict['accion'] = accion_path
 
         topic_target = f"{tenant}/{gateway}/{seccion_slug}/{sistema_slug}/{accion_path}"
+        sub_group = "mezcla" if accion_path == "mezcla" else "reposicion" if "repo" in accion_path else "control"
+        topic_standard = f"{tenant}/{gateway}/{seccion_slug}/{sistema_slug}/comandos/{sub_group}"
 
         try:
-            # Publicar el comando específico en el broker MQTT
+            # Publicar instantáneamente tanto en tópico directo como en el tópico estándar de comandos
             _publish_mqtt_single(topic_target, payload_dict, f"django-backend-cmd-{dispositivo.pk}")
+            _publish_mqtt_single(topic_standard, payload_dict, f"django-backend-cmd-{dispositivo.pk}")
             
             models.RegistroAuditoria.objects.create(
                 usuario=request.user if request.user and request.user.is_authenticated else None,
@@ -298,6 +342,16 @@ class DispositivoSCADAViewSet(viewsets.ModelViewSet):
                 ip_origen=request.META.get('REMOTE_ADDR') or '127.0.0.1'
             )
             
+            # Actualizar valor_lectura y estado inmediatamente en el modelo
+            try:
+                val_num = 1.0 if valor_mqtt in ['1', 1] else 0.0
+                dispositivo.valor_lectura = val_num
+                dispositivo.ultima_lectura = timezone.now()
+                dispositivo.estado = 'ONLINE'
+                dispositivo.save(update_fields=['valor_lectura', 'ultima_lectura', 'estado'])
+            except Exception:
+                pass
+
             return Response({
                 'status': 'Comando enviado exitosamente',
                 'topic': topic_target,
@@ -741,7 +795,7 @@ class RegistroAuditoriaViewSet(viewsets.ModelViewSet):
         if sistema_id and sistema_id != 'seleccionar':
             try:
                 s_id = int(sistema_id)
-                queryset = queryset.filter(models.Q(datos__sistema_id=s_id) | models.Q(modulo__in=['SCADA', 'PRODUCCION']))
+                queryset = queryset.filter(Q(datos__sistema_id=s_id) | Q(modulo__in=['SCADA', 'PRODUCCION']))
             except (ValueError, TypeError):
                 queryset = queryset.filter(modulo__in=['SCADA', 'PRODUCCION'])
             
@@ -795,13 +849,37 @@ class SistemaViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = models.Sistema.objects.select_related('fabrica').all().order_by('nombre')
-        fabrica_id = self.request.query_params.get('fabrica') or self.request.query_params.get('fabrica_id')
+        params = getattr(self.request, 'query_params', getattr(self.request, 'GET', {})) if self.request else {}
+        fabrica_id = params.get('fabrica') or params.get('fabrica_id') if params else None
         if fabrica_id and fabrica_id != 'todos':
             try:
                 queryset = queryset.filter(fabrica_id=int(fabrica_id))
-            except ValueError:
+            except (ValueError, TypeError):
                 pass
         return queryset
+
+    def get_object(self):
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        lookup_value = str(self.kwargs.get(lookup_url_kwarg, ''))
+
+        queryset = models.Sistema.objects.all()
+
+        if lookup_value.isdigit():
+            obj = queryset.filter(pk=int(lookup_value)).first()
+            if obj:
+                self.check_object_permissions(self.request, obj)
+                return obj
+
+        obj = queryset.filter(
+            Q(nombre__iexact=lookup_value) |
+            Q(nombre__iexact=lookup_value.replace('_', ' ')) |
+            Q(nombre__icontains=lookup_value.replace('_', ' '))
+        ).first()
+        if obj:
+            self.check_object_permissions(self.request, obj)
+            return obj
+
+        return super().get_object()
 
     @action(detail=True, methods=['post'])
     def control(self, request, pk=None):

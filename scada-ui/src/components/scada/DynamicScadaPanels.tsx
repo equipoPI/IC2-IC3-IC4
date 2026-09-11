@@ -71,8 +71,8 @@ export function DynamicScadaPanels({
     if (key === 'ingrediente_a' || key.includes('aceite') || key === 'ingrediente_a_lts') return 50;
     if (key === 'ingrediente_b' || key.includes('agua') || key === 'ingrediente_b_lts') return 30;
     if (key.includes('hora')) return 0;
-    if (key.includes('minuto') || key.includes('min')) return 15;
-    if (key.includes('tiempo')) return 15;
+    if (key.includes('minuto') || key.includes('min')) return 1;
+    if (key.includes('tiempo')) return 1;
     if (ctrl.min_val !== undefined) return ctrl.min_val;
     return 0;
   };
@@ -93,14 +93,15 @@ export function DynamicScadaPanels({
         setMapeos(list);
       }
 
+      let loadedRecipes: any[] = [];
       if (resRecetas.ok) {
         const dRec = await resRecetas.json();
-        const rList = Array.isArray(dRec) ? dRec : dRec.results || [];
-        setRecetasPlantillas(rList);
+        loadedRecipes = Array.isArray(dRec) ? dRec : dRec.results || [];
+        setRecetasPlantillas(loadedRecipes);
       } else if (resPlantillas.ok) {
         const dPla = await resPlantillas.json();
-        const pList = Array.isArray(dPla) ? dPla : dPla.results || [];
-        setRecetasPlantillas(pList);
+        loadedRecipes = Array.isArray(dPla) ? dPla : dPla.results || [];
+        setRecetasPlantillas(loadedRecipes);
       }
 
       // Initialize parameters state for all controls
@@ -127,14 +128,14 @@ export function DynamicScadaPanels({
       });
 
       // Auto-select first recipe for recipe controls if none selected
-      if (recetasPlantillas.length > 0) {
+      if (loadedRecipes.length > 0) {
         list.filter(c => c.tipo_control === 'RECETA' || c.nombre_accion.includes('receta')).forEach(ctrl => {
           setSelectedRecipeTemplate(prev => {
             if (!prev[ctrl.id]) {
-              const firstRecipe = recetasPlantillas[0];
+              const firstRecipe = loadedRecipes[0];
               // Populate initial parameters
               setTimeout(() => {
-                handleSelectPlantillaForControl(ctrl.id, String(firstRecipe.id), recetasPlantillas);
+                handleSelectPlantillaForControl(ctrl.id, String(firstRecipe.id), loadedRecipes);
               }, 0);
               return { ...prev, [ctrl.id]: String(firstRecipe.id) };
             }
@@ -182,13 +183,13 @@ export function DynamicScadaPanels({
 
     // 1. Calculate duration / time in hours and minutes
     let calcHoras = 0;
-    let calcMinutos = 15;
+    let calcMinutos = 1;
     if (item.tiempo_horas !== undefined || item.tiempo_minutos !== undefined) {
       calcHoras = Number(item.tiempo_horas) || 0;
       calcMinutos = Number(item.tiempo_minutos) || 0;
     } else if (item.tiempo_mezcla_min || item.tiempo_estimado) {
       const match = String(item.tiempo_mezcla_min || item.tiempo_estimado).match(/(\d+)/);
-      const totalMin = match ? Number(match[1]) : 15;
+      const totalMin = match ? Number(match[1]) : 1;
       calcHoras = Math.floor(totalMin / 60);
       calcMinutos = totalMin % 60;
     }
@@ -266,10 +267,11 @@ export function DynamicScadaPanels({
       const subtopic = toSlug(m.nombre_accion);
       const rawSec = selectedSeccionNombre && selectedSeccionNombre !== "Todas las Secciones" ? toSlug(selectedSeccionNombre) : "a1";
       const rawSys = selectedSistemaNombre && selectedSistemaNombre !== "Todos los Sistemas" ? toSlug(selectedSistemaNombre) : "linea_mezclado_1";
+      const rawTenant = selectedPlantaNombre && selectedPlantaNombre !== "Todas las Plantas" ? toSlug(selectedPlantaNombre) : "rafaela_sa";
       
       const topic = (m.plantilla_topico || "{tenant}/{gateway}/{seccion}/{sistema}/{accion}")
-        .replace(/\{tenant\}/g, "rafaela_sa")
-        .replace(/\{planta\}/g, "rafaela_sa")
+        .replace(/\{tenant\}/g, rawTenant)
+        .replace(/\{planta\}/g, rawTenant)
         .replace(/\{gateway\}/g, "d83add60dbb0")
         .replace(/\{gateway_id\}/g, "d83add60dbb0")
         .replace(/\{seccion\}/g, rawSec)
@@ -296,15 +298,14 @@ export function DynamicScadaPanels({
         payloadStr = payloadStr.replace(/\{[a-zA-Z0-9_]+\}/g, String(singleVal));
       }
 
-      const resp = await apiFetch("/api/v1/comunicaciones-mqtt/", {
+      const resp = await apiFetch("/api/v1/auditoria/transmitir/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          topic,
+          topico: topic,
           payload: payloadStr,
-          direccion: "PUBLICADO",
-          qos: 1,
-          configuracion: 1,
+          sistema_id: selectedSistemaId,
+          origen: `Panel Dinámico: ${m.nombre}`,
         }),
       });
 
@@ -332,19 +333,25 @@ export function DynamicScadaPanels({
   };
 
   const handleDeleteControl = async (id: number | string, nombre: string) => {
+    // Actualización optimista inmediata en UI sin esperar al servidor
+    setMapeos(prev => prev.filter(m => m.id !== id));
+    toast({
+      title: "🗑️ Control Eliminado",
+      description: `Se eliminó "${nombre}".`,
+    });
+
     try {
       const resp = await apiFetch(`/api/v1/mapeos-acciones-mqtt/${id}/`, {
         method: "DELETE",
       });
       if (resp.ok || resp.status === 204) {
-        toast({
-          title: "🗑️ Control Eliminado",
-          description: `Se eliminó "${nombre}".`,
-        });
-        loadPanelsData();
         if (onComandosUpdated) onComandosUpdated();
+      } else {
+        // Rollback en caso de error
+        loadPanelsData();
       }
     } catch (e) {
+      loadPanelsData();
       toast({
         title: "❌ Error al eliminar",
         description: "No se pudo comunicarse con el servidor.",

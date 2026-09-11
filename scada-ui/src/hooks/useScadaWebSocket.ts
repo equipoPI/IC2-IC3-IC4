@@ -23,10 +23,18 @@ export function useScadaWebSocket(options: UseScadaWebSocketOptions = {}) {
 
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.hostname || 'localhost';
-      // In dev, Django runs on port 8000
-      const wsPort = import.meta.env.VITE_WS_PORT || '8000';
-      const wsUrl = import.meta.env.VITE_WS_URL || `${protocol}//${host}:${wsPort}/ws/scada/`;
+      const hostname = window.location.hostname || 'localhost';
+      const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+      
+      let wsUrl = import.meta.env.VITE_WS_URL;
+      if (!wsUrl) {
+        if (isLocalhost) {
+          const wsPort = import.meta.env.VITE_WS_PORT || '8000';
+          wsUrl = `${protocol}//${hostname}:${wsPort}/ws/scada/`;
+        } else {
+          wsUrl = `${protocol}//${window.location.host}/ws/scada/`;
+        }
+      }
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;

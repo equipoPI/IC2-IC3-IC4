@@ -33,7 +33,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { useStorage, StorageUnit } from "@/contexts/StorageContext";
-import { machineDefinitions } from "@/components/scada/ScadaFlowDiagram";
+import { machineDefinitions } from "@/components/scada/scadaConstants";
 
 const statusConfig = {
   active: { label: "Activo", className: "bg-success/20 text-success border-success/30" },

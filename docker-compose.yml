@@ -26,7 +26,7 @@ services:
       dockerfile: Dockerfile
     container_name: scada_backend
     entrypoint: [ "/app/entrypoint.sh" ]
-    command: [ "gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--threads", "4", "mysite.wsgi:application" ]
+    command: [ "daphne", "-b", "0.0.0.0", "-p", "8000", "mysite.asgi:application" ]
     volumes:
       - ./mysite:/app
       - ./mosquitto/config:/mosquitto/config
@@ -130,10 +130,11 @@ services:
     env_file:
       - key.env
     environment:
-      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN:-3IncvdxAuEPGiTH5cGnf2iIBoNE_89xvMAzxy9U2VQcD2XFCJ}
     command:
       - "http"
-      - "--url=${NGROK_DOMAIN}"
+      - "--url=${NGROK_DOMAIN:-https://remarry-anyplace-appraiser.ngrok-free.dev}"
+      - "--log=stdout"
       - "frontend:5173"
     networks:
       - scada_network

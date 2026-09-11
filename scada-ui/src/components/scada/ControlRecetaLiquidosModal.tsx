@@ -32,7 +32,7 @@ export function ControlRecetaLiquidosModal({
   const [liquido1, setLiquido1] = useState<number>(50);
   const [liquido2, setLiquido2] = useState<number>(30);
   const [hora, setHora] = useState<number>(0);
-  const [minuto, setMinuto] = useState<number>(15);
+  const [minuto, setMinuto] = useState<number>(1);
   const [dispositivos, setDispositivos] = useState<any[]>([]);
   const [plantillas, setPlantillas] = useState<any[]>([]);
   const [selectedPlantilla, setSelectedPlantilla] = useState<string>("");

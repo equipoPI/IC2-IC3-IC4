@@ -22,9 +22,10 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
+import { useScadaWebSocket } from "@/hooks/useScadaWebSocket";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -41,57 +42,71 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     lastTime: "Conectando..."
   });
 
-  useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const resp = await apiFetch("/api/v1/dispositivos/");
-        if (resp.ok) {
-          const data = await resp.json();
-          const list = Array.isArray(data) ? data : data.results || [];
-          const now = Date.now();
-          let onlineCount = 0;
-          let latestTimestamp = 0;
+  const fetchStatus = useCallback(async () => {
+    try {
+      const resp = await apiFetch("/api/v1/dispositivos/");
+      if (resp.ok) {
+        const data = await resp.json();
+        const list = Array.isArray(data) ? data : data.results || [];
+        const now = Date.now();
+        let onlineCount = 0;
+        let latestTimestamp = 0;
 
-          list.forEach((d: any) => {
-            const st = String(d.estado || '').toUpperCase();
-            const isOffline = st.includes('OFF') || st.includes('DESCONECT') || st.includes('INACTIV');
+        list.forEach((d: any) => {
+          const st = String(d.estado || '').toUpperCase();
+          const isExplicitOffline = st.includes('OFF') || st.includes('DESCONECT') || st.includes('INACTIV');
 
-            if (d.ultima_lectura) {
-              const ms = new Date(d.ultima_lectura).getTime();
-              if (!isNaN(ms) && ms > latestTimestamp) {
+          let isRecent = false;
+          if (d.ultima_lectura) {
+            const ms = new Date(d.ultima_lectura).getTime();
+            if (!isNaN(ms)) {
+              if (ms > latestTimestamp) {
                 latestTimestamp = ms;
               }
+              if (now - ms <= 60000) {
+                isRecent = true;
+              }
             }
+          }
 
-            if (!isOffline) {
-              onlineCount++;
-            }
-          });
+          if (!isExplicitOffline && isRecent) {
+            onlineCount++;
+          }
+        });
 
-          const totalCount = list.length;
-          const finalOnline = onlineCount;
+        const totalCount = list.length;
+        const finalOnline = onlineCount;
 
-          setStats({
-            total: totalCount,
-            online: finalOnline,
-            lastTime: latestTimestamp > 0
-              ? new Date(latestTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-              : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-          });
-        }
-      } catch (e) {
-        // silent
+        setStats({
+          total: totalCount,
+          online: finalOnline,
+          lastTime: latestTimestamp > 0
+            ? new Date(latestTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            : "Sin señal"
+        });
       }
-    };
+    } catch (e) {
+      // silent
+    }
+  }, []);
 
+  useScadaWebSocket({
+    onMessage: () => {
+      if (document.visibilityState === 'visible') {
+        fetchStatus();
+      }
+    }
+  });
+
+  useEffect(() => {
     fetchStatus();
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         fetchStatus();
       }
-    }, 10000);
+    }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchStatus]);
 
   const rangoNum = Number(usuario?.rango || (isAdmin ? 8 : 1));
 

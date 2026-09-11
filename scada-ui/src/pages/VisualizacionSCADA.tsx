@@ -107,10 +107,16 @@ const VisualizacionSCADA = () => {
   const [secciones, setSecciones] = useState<any[]>([]);
   const [sistemas, setSistemas] = useState<any[]>([]);
 
-  // Active filter selections
-  const [selectedPlanta, setSelectedPlanta] = useState<string>('seleccionar');
-  const [selectedSeccion, setSelectedSeccion] = useState<string>('seleccionar');
-  const [selectedSistema, setSelectedSistema] = useState<string>('seleccionar');
+  // Active filter selections - persisted in localStorage
+  const [selectedPlanta, setSelectedPlanta] = useState<string>(() => {
+    return localStorage.getItem('scada_selected_planta') || 'seleccionar';
+  });
+  const [selectedSeccion, setSelectedSeccion] = useState<string>(() => {
+    return localStorage.getItem('scada_selected_seccion') || 'seleccionar';
+  });
+  const [selectedSistema, setSelectedSistema] = useState<string>(() => {
+    return localStorage.getItem('scada_selected_sistema') || 'seleccionar';
+  });
 
   // MQTT Config modal states
   const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -147,20 +153,62 @@ const VisualizacionSCADA = () => {
         apiFetch("/api/v1/sistemas/"),
       ]);
 
+      let loadedPlantas: any[] = [];
+      let loadedSecciones: any[] = [];
+      let loadedSistemas: any[] = [];
+
       if (rPlantas.ok) {
         const data = await rPlantas.json();
-        const list = Array.isArray(data) ? data : data.results || [];
-        setPlantas(list);
+        loadedPlantas = Array.isArray(data) ? data : data.results || [];
+        setPlantas(loadedPlantas);
       }
       if (rSecciones.ok) {
         const data = await rSecciones.json();
-        const list = Array.isArray(data) ? data : data.results || [];
-        setSecciones(list);
+        loadedSecciones = Array.isArray(data) ? data : data.results || [];
+        setSecciones(loadedSecciones);
       }
       if (rSistemas.ok) {
         const data = await rSistemas.json();
-        const list = Array.isArray(data) ? data : data.results || [];
-        setSistemas(list);
+        loadedSistemas = Array.isArray(data) ? data : data.results || [];
+        setSistemas(loadedSistemas);
+      }
+
+      // Auto-restore saved selection or pick sensible defaults (e.g. rafaela_sa)
+      const curPlanta = localStorage.getItem('scada_selected_planta');
+      const curSeccion = localStorage.getItem('scada_selected_seccion');
+      const curSistema = localStorage.getItem('scada_selected_sistema');
+
+      let targetPlanta = curPlanta;
+      if ((!targetPlanta || targetPlanta === 'seleccionar') && loadedPlantas.length > 0) {
+        const pref = loadedPlantas.find(p => p.nombre?.toLowerCase().includes('rafaela')) || loadedPlantas[0];
+        if (pref) targetPlanta = String(pref.id);
+      }
+
+      if (targetPlanta && targetPlanta !== 'seleccionar') {
+        setSelectedPlanta(targetPlanta);
+        localStorage.setItem('scada_selected_planta', targetPlanta);
+
+        let targetSeccion = curSeccion;
+        const validSecs = loadedSecciones.filter(s => String(s.fabrica) === targetPlanta);
+        if ((!targetSeccion || targetSeccion === 'seleccionar' || !validSecs.some(s => String(s.id) === targetSeccion)) && validSecs.length > 0) {
+          targetSeccion = String(validSecs[0].id);
+        }
+
+        if (targetSeccion && targetSeccion !== 'seleccionar') {
+          setSelectedSeccion(targetSeccion);
+          localStorage.setItem('scada_selected_seccion', targetSeccion);
+
+          let targetSistema = curSistema;
+          const validSists = loadedSistemas.filter(sys => String(sys.seccion) === targetSeccion || String(sys.fabrica) === targetPlanta);
+          if ((!targetSistema || targetSistema === 'seleccionar' || !validSists.some(sys => String(sys.id) === targetSistema)) && validSists.length > 0) {
+            targetSistema = String(validSists[0].id);
+          }
+
+          if (targetSistema && targetSistema !== 'seleccionar') {
+            setSelectedSistema(targetSistema);
+            localStorage.setItem('scada_selected_sistema', targetSistema);
+          }
+        }
       }
     } catch (e) {
       // silent
@@ -293,6 +341,16 @@ const VisualizacionSCADA = () => {
     if (selectedSistema !== 'seleccionar') {
       loadUltimaTransmision();
     }
+
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadDispositivos();
+        if (selectedSistema !== 'seleccionar') {
+          loadUltimaTransmision();
+        }
+      }
+    }, 1500);
+    return () => clearInterval(timer);
   }, [selectedSistema]);
 
   // Fullscreen event listener
@@ -570,8 +628,11 @@ const VisualizacionSCADA = () => {
                 {/* Select Planta */}
                 <Select value={selectedPlanta} onValueChange={(val) => {
                   setSelectedPlanta(val);
+                  localStorage.setItem('scada_selected_planta', val);
                   setSelectedSeccion('seleccionar');
+                  localStorage.removeItem('scada_selected_seccion');
                   setSelectedSistema('seleccionar');
+                  localStorage.removeItem('scada_selected_sistema');
                 }}>
                   <SelectTrigger className="w-[170px] bg-background border-border h-9 text-xs">
                     <SelectValue placeholder="--- Seleccionar Planta ---" />
@@ -587,7 +648,9 @@ const VisualizacionSCADA = () => {
                 {/* Select Sección */}
                 <Select value={selectedSeccion} onValueChange={(val) => {
                   setSelectedSeccion(val);
+                  localStorage.setItem('scada_selected_seccion', val);
                   setSelectedSistema('seleccionar');
+                  localStorage.removeItem('scada_selected_sistema');
                 }} disabled={selectedPlanta === 'seleccionar'}>
                   <SelectTrigger className="w-[170px] bg-background border-border h-9 text-xs">
                     <SelectValue placeholder="--- Seleccionar Sección ---" />
@@ -601,7 +664,10 @@ const VisualizacionSCADA = () => {
                 </Select>
 
                 {/* Select Sistema */}
-                <Select value={selectedSistema} onValueChange={setSelectedSistema} disabled={selectedSeccion === 'seleccionar'}>
+                <Select value={selectedSistema} onValueChange={(val) => {
+                  setSelectedSistema(val);
+                  localStorage.setItem('scada_selected_sistema', val);
+                }} disabled={selectedSeccion === 'seleccionar'}>
                   <SelectTrigger className="w-[170px] bg-background border-border h-9 text-xs">
                     <SelectValue placeholder="--- Seleccionar Sistema ---" />
                   </SelectTrigger>

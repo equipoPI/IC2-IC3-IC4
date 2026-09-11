@@ -34,8 +34,8 @@
 // ============================================================
 
 // Factor de conversión de caudalímetros (pulsos por litro)
-// Modificar este valor si cambia el modelo del caudalímetro
-float pulsosnecesarios = 450.0;
+// Calibrado experimentalmente: 1 Litro = 1003.5 pulsos (1.0035 pulsos por ml)
+float pulsosnecesarios = 1003.5;
 
 // Porcentaje de corte de nivel para vaciado y desecho (%)
 // El bombo queda suspendido en el líquido y nunca se vacía completamente
@@ -507,7 +507,7 @@ void calibracionNivelDirecto() {
 // ============================================================
 
 void pulse1() {
-  waterFlow1 += 1.0 / pulsosnecesarios;
+  waterFlow1 += 1000.0 / pulsosnecesarios;  // Acumulador en mililitros (ml)
 }
 
 
@@ -518,7 +518,7 @@ void pulse1() {
 
 void pulse2() {
   if (terminoLlenadoLiquido1 == 1) {
-    waterFlow2 += 1.0 / pulsosnecesarios;
+    waterFlow2 += 1000.0 / pulsosnecesarios;  // Acumulador en mililitros (ml)
   }
 }
 
@@ -629,15 +629,15 @@ void activacion() {
   TiempoHorUso = (unsigned long)TiempoHor * 3600000UL;
   TiempoMinUso = (unsigned long)TiempoMin * 60000UL;
   
-  // Soporta tanto valores directos de litros (ej: 5.0) como el protocolo heredado (15000 -> 5.0)
+  // Las cantidades de receta se interpretan en mililitros (ml) para prototipo a escala
   if (Ingrediente1 >= 10000.0) {
-    liquido1 = (Ingrediente1 - 10000.0) / 1000.0;
+    liquido1 = (Ingrediente1 - 10000.0);
   } else {
     liquido1 = Ingrediente1;
   }
 
   if (Ingrediente2 >= 20000.0) {
-    liquido2 = (Ingrediente2 - 20000.0) / 1000.0;
+    liquido2 = (Ingrediente2 - 20000.0);
   } else {
     liquido2 = Ingrediente2;
   }

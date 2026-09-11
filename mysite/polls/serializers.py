@@ -385,23 +385,20 @@ class DispositivoSCADASerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def get_valor_lectura(self, obj):
-        lectura = obj.lecturas.first()
-        return lectura.valor if lectura else None
+        return obj.valor_lectura
 
     def get_unidad_lectura(self, obj):
-        lectura = obj.lecturas.first()
-        return lectura.unidad if lectura else "N/A"
+        return obj.unidad_lectura if obj.unidad_lectura else "N/A"
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
         from django.utils import timezone
-        if instance.estado == 'OFFLINE':
-            ret['estado'] = 'OFFLINE'
-        elif instance.ultima_lectura:
+        # Si en 1 minuto (60s) no vuelve a aparecer telemetría/tópico del componente, pasa a OFFLINE
+        if instance.ultima_lectura:
             delta = (timezone.now() - instance.ultima_lectura).total_seconds()
-            ret['estado'] = "ONLINE" if delta < 60 else "OFFLINE"
+            ret['estado'] = "ONLINE" if delta <= 60 else "OFFLINE"
         else:
-            ret['estado'] = instance.estado or "OFFLINE"
+            ret['estado'] = "OFFLINE"
         return ret
 
 

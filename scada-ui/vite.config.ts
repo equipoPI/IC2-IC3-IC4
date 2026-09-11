@@ -19,6 +19,12 @@ export default defineConfig(({ mode }) => ({
         changeOrigin: true,
         secure: false,
       },
+      '/ws': {
+        target: process.env.VITE_WS_BACKEND || process.env.VITE_API_URL || 'http://backend:8000',
+        ws: true,
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
